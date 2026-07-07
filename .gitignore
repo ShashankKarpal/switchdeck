@@ -10,3 +10,11 @@ claude-switch-log.txt
 __pycache__/
 *.pyc
 backups/
+
+# hardening baseline
+*.pem
+*.key
+*.db
+*.sqlite
+credentials.*
+config.json
