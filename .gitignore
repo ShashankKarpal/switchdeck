@@ -1,0 +1,12 @@
+# secrets and local state: never committed
+local_settings.py
+secrets.json
+*.cswap
+*.bak
+*.log
+claude-switch-log.txt
+.env
+.DS_Store
+__pycache__/
+*.pyc
+backups/
