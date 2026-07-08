@@ -205,7 +205,7 @@ class SwitchBar(rumps.App):
         log_click("menubar open codex")
         rc, _out, err = _run(CODEX_LAUNCH_CMD, timeout=15)
         if rc == 0:
-            _notify("SwitchBar", "Codex", "Opening Codex in terminal")
+            _notify("SwitchBar", "Codex", "Opening Codex")
         else:
             _notify("SwitchBar", "Codex launch failed", (err or "check CODEX_LAUNCH_CMD")[:120])
 
