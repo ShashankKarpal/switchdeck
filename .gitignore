@@ -5,16 +5,9 @@ secrets.json
 *.bak
 *.log
 claude-switch-log.txt
+switchdeck-clicks.log
 .env
 .DS_Store
 __pycache__/
 *.pyc
 backups/
-
-# hardening baseline
-*.pem
-*.key
-*.db
-*.sqlite
-credentials.*
-config.json
