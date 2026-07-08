@@ -134,6 +134,8 @@ class SwitchBar(rumps.App):
 
     # ---- Claude accounts ----
     def refresh(self, _sender=None):
+        if _sender is not None:
+            self.refresh_codex()
         data = cswap_list()
         items = []
         active_no = None
