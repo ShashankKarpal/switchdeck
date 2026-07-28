@@ -3,20 +3,22 @@
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.shashank.switchbar</string>
+  <!-- Replace YOU with your macOS short username, and adjust the repo path,
+       before running: launchctl load ~/Library/LaunchAgents/com.shashank.switchbar.plist -->
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/shashank.kk/.switchdeck-venv/bin/python3</string>
-    <string>/Users/shashank.kk/Documents/GitHub/switchdeck/switchbar.py</string>
+    <string>/Users/YOU/.switchdeck-venv/bin/python3</string>
+    <string>/Users/YOU/Documents/GitHub/switchdeck/switchbar.py</string>
   </array>
-  <key>WorkingDirectory</key><string>/Users/shashank.kk/Documents/GitHub/switchdeck</string>
+  <key>WorkingDirectory</key><string>/Users/YOU/Documents/GitHub/switchdeck</string>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><false/>
-  <key>StandardOutPath</key><string>/Users/shashank.kk/switchdeck.log</string>
-  <key>StandardErrorPath</key><string>/Users/shashank.kk/switchdeck.log</string>
+  <key>StandardOutPath</key><string>/Users/YOU/switchdeck.log</string>
+  <key>StandardErrorPath</key><string>/Users/YOU/switchdeck.log</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
-    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/Users/shashank.kk/.local/bin</string>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/Users/YOU/.local/bin</string>
   </dict>
 </dict>
 </plist>
