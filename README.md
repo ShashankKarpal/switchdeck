@@ -13,11 +13,11 @@
 <p align="center"><b>A macOS menu bar switcher and usage deck for running multiple Claude Code accounts and OpenAI Codex.</b></p>
 
 <p align="center">
-  <img alt="Platform" src="https://img.shields.io/badge/platform-macOS-D97757?style=flat-square">
-  <img alt="Status" src="https://img.shields.io/badge/status-v1.5-D97757?style=flat-square">
-  <img alt="Local only" src="https://img.shields.io/badge/local-only-D97757?style=flat-square">
-  <img alt="Stack" src="https://img.shields.io/badge/built%20with-Python-2C2C2C?style=flat-square">
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-2C2C2C?style=flat-square"></a>
+  <img alt="Platform" src="https://img.shields.io/badge/platform-macOS-0F7D74?style=flat-square">
+  <img alt="Status" src="https://img.shields.io/badge/status-v1.5-0F7D74?style=flat-square">
+  <img alt="Local only" src="https://img.shields.io/badge/local-only-0F7D74?style=flat-square">
+  <img alt="Stack" src="https://img.shields.io/badge/built%20with-Python-1C1B1D?style=flat-square">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-1C1B1D?style=flat-square"></a>
 </p>
 
 ## What it does
