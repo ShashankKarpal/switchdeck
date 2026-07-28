@@ -1,4 +1,3 @@
-<!-- BANNER: uncomment once design/github/readme-banner-{light,dark}-1400x400.png exist.
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)"  srcset="design/github/readme-banner-dark-1400x400.png">
@@ -6,7 +5,6 @@
     <img alt="switchdeck" src="design/github/readme-banner-dark-1400x400.png" width="680">
   </picture>
 </p>
--->
 
 <h1 align="center">switchdeck</h1>
 
