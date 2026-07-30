@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""SwitchBar (switchdeck v1.5): menu bar account switcher + usage deck.
+"""SwitchBar (switchdeck v1.6): menu bar account switcher + usage deck.
 
 Wraps cswap (claude-swap) to switch between two same-email Claude Code
 accounts, shows per-account 5h/7d usage, and a read-only Codex usage row.
 Owns only the surface; the engine is an upgradable dependency.
+
+v1.6: live-session awareness. A running Claude Code CLI caches its OAuth
+credential in memory (macOS Keychain cache is ~30s), so a switch does not
+apply to an already-running session instantly, and never mid-reply. When a
+switch succeeds while CLI sessions are live, the notification now says so,
+and the click log records the live session count for later audit.
 """
 import datetime as _dt
 import json
@@ -24,6 +30,7 @@ SLOT_LABELS = {1: "primary", 2: "secondary"}
 SHORT_LABELS = {1: "1", 2: "2"}
 CLICK_LOG = os.path.join(HOME, "switchdeck-clicks.log")
 CLAUDE_JSON = os.path.join(HOME, ".claude.json")
+CLAUDE_SESSIONS_DIR = os.path.join(HOME, ".claude", "sessions")
 REFRESH_SECONDS = 300
 CODEX_REFRESH_SECONDS = 1800
 CODEX_USAGE_CMD = ["npx", "-y", "ccusage@latest", "codex", "--json"]
@@ -60,6 +67,44 @@ def _notify(title, subtitle, message):
         rumps.notification(title, subtitle, message)
     except Exception:
         pass  # notifications are best-effort; never crash the bar
+
+
+def _pid_alive(pid):
+    """True if a process with this PID is running (same check cswap uses)."""
+    if not isinstance(pid, int) or pid <= 1:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except PermissionError:
+        return True  # exists, just not ours
+    except OSError:
+        return False
+
+
+def live_claude_sessions():
+    """Running Claude Code sessions from ~/.claude/sessions/{pid}.json.
+
+    Claude Code writes one JSON per session and removes it on exit; stale
+    files (dead PIDs) are filtered out. This is the same mechanism cswap's
+    own process detection uses.
+    """
+    sessions = []
+    try:
+        names = os.listdir(CLAUDE_SESSIONS_DIR)
+    except OSError:
+        return sessions
+    for name in names:
+        if not name.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(CLAUDE_SESSIONS_DIR, name)) as f:
+                data = json.load(f)
+            if _pid_alive(data.get("pid")):
+                sessions.append(data)
+        except (ValueError, TypeError, OSError):
+            continue
+    return sessions
 
 
 def cswap_list():
@@ -144,7 +189,7 @@ class SwitchBar(rumps.App):
             for acc in sorted(data["accounts"], key=lambda a: a.get("number", 0)):
                 n = acc.get("number")
                 label = _lbl(SLOT_LABELS, n, "slot %s" % n)
-                mark = u"\u2713 " if acc.get("active") else "     "
+                mark = u"✓ " if acc.get("active") else "     "
                 title = "%s%s  -  %s" % (mark, label, fmt_usage(acc.get("usage")))
                 cb = None if acc.get("active") else self._make_switch(n, label)
                 items.append(rumps.MenuItem(title, callback=cb))
@@ -152,11 +197,16 @@ class SwitchBar(rumps.App):
             items.append(rumps.MenuItem("cswap unavailable - click to retry",
                                         callback=self.refresh))
         org, _u8 = active_org()
-        self.title = u"\u21c4 %s" % _lbl(SHORT_LABELS, active_no, "?")
+        self.title = u"⇄ %s" % _lbl(SHORT_LABELS, active_no, "?")
         items.append(rumps.separator)
         items.append(rumps.MenuItem(self.codex_line + "  -  click to open",
                                     callback=self._open_codex))
         items.append(rumps.MenuItem("Active org: %s" % org, callback=None))
+        live = live_claude_sessions()
+        if live:
+            items.append(rumps.MenuItem(
+                "%d live CLI session(s): switch applies in ~30s, not mid-reply"
+                % len(live), callback=None))
         items.append(rumps.separator)
         items.append(rumps.MenuItem("Refresh", callback=self.refresh))
         items.append(rumps.MenuItem("Quit", callback=self._quit))
@@ -173,10 +223,17 @@ class SwitchBar(rumps.App):
             except ValueError:
                 pass
             if ok:
-                log_click("menubar switch-to %s (%s)" % (n, label))
+                live = live_claude_sessions()
+                log_click("menubar switch-to %s (%s) live_cli=%d"
+                          % (n, label, len(live)))
                 org, u8 = active_org()
-                _notify("SwitchBar", "Switched to %s" % label,
-                        "Active org: %s (%s...)" % (org, u8))
+                if live:
+                    _notify("SwitchBar", "Switched to %s" % label,
+                            "%d live CLI session(s): applies in ~30s, "
+                            "not mid-reply." % len(live))
+                else:
+                    _notify("SwitchBar", "Switched to %s" % label,
+                            "Active org: %s (%s...)" % (org, u8))
             else:
                 _notify("SwitchBar", "Switch failed",
                         (err or out or "unknown error").strip()[:120])
