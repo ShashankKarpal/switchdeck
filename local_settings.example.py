@@ -9,3 +9,7 @@ SHORT_LABELS = {1: "1", 2: "2"}                # menu bar title suffix
 # CODEX_REFRESH_SECONDS = 1800
 # CODEX_USAGE_CMD = ["npx", "-y", "ccusage@latest", "codex", "--json"]
 # CODEX_USAGE_CMD = None   # disable the Codex row
+
+# The Codex row launches Ghostty by default. Point this at any terminal:
+# CODEX_LAUNCH_CMD = ["open", "-na", "Terminal", "--args", "-e", "codex"]
+# CODEX_LAUNCH_CMD = ["open", "-na", "iTerm", "--args", "-e", "codex"]

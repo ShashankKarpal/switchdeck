@@ -8,7 +8,7 @@
 
 <h1 align="center">switchdeck</h1>
 
-<p align="center"><b>A macOS menu bar switcher and usage deck for running multiple Claude Code accounts and OpenAI Codex.</b></p>
+<p align="center"><b>A macOS menu bar switcher for multiple Claude Code accounts, with an OpenAI Codex usage row and launcher.</b></p>
 
 <p align="center">
   <img alt="Platform" src="https://img.shields.io/badge/platform-macOS-0F7D74?style=flat-square">
@@ -22,7 +22,7 @@
 
 - Switches between Claude Code accounts from the menu bar in one click.
 - Shows 5 hour and 7 day usage for every account without opening a terminal.
-- Shows Codex token usage and cost in the same place.
+- Shows Codex token usage and cost in the same place (read-only; switching is Claude Code only).
 - Launches Codex in a terminal from the same menu.
 - Logs every switch locally, so usage is measured rather than remembered.
 
@@ -64,13 +64,13 @@ Requires: macOS, Python 3.11 or later, `uv`.
 git clone https://github.com/ShashankKarpal/switchdeck.git
 cd switchdeck
 uv tool install claude-swap
-python3 -m venv .switchdeck-venv && .switchdeck-venv/bin/pip install rumps
+python3 -m venv ~/.switchdeck-venv && ~/.switchdeck-venv/bin/pip install rumps
 cp local_settings.example.py local_settings.py
 cp com.shashank.switchbar.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.shashank.switchbar.plist
 ```
 
-Edit the plist paths to match your own home directory before loading it.
+The venv lives at `~/.switchdeck-venv`, which is where the LaunchAgent expects it. Edit the plist paths (`YOU`, and the repo path if you cloned somewhere other than `~/Documents/GitHub/switchdeck`) to match your machine before loading it.
 
 ## Configuration
 
@@ -83,6 +83,7 @@ SHORT_LABELS = {1: "1", 2: "2"}                # menu bar title suffix
 # REFRESH_SECONDS = 300
 # CODEX_REFRESH_SECONDS = 1800
 # CODEX_USAGE_CMD = None   # disable the Codex row
+# CODEX_LAUNCH_CMD = ["open", "-na", "Terminal", "--args", "-e", "codex"]  # default launcher is Ghostty; set your own terminal here
 ```
 
 Real account labels stay in the local copy only. Nothing in this repository identifies an account.
