@@ -37,6 +37,12 @@ CODEX_USAGE_CMD = ["npx", "-y", "ccusage@latest", "codex", "--json"]
 # Clicking the Codex row jumps into the tool: opens a terminal running codex.
 CODEX_LAUNCH_CMD = ["open", "-na", "Ghostty", "--args", "-e", "codex"]
 
+# Engine contract: the cswap release and JSON schemaVersion this build is
+# validated against (CLAUDE.md decision log). Drift shows a warning row and
+# nothing else changes; there is no auto-upgrade. Not overridable locally.
+VALIDATED_ENGINE = "0.25.0"
+VALIDATED_SCHEMA_VERSION = 1
+
 try:
     import local_settings as _ls
     for _k in ("CSWAP_BIN", "SLOT_LABELS", "SHORT_LABELS", "CLICK_LOG",
@@ -120,6 +126,26 @@ def cswap_list():
     return data
 
 
+def engine_version():
+    rc, out, _err = _run([CSWAP_BIN, "--version"], timeout=10)
+    if rc != 0 or not out.strip():
+        return None
+    return out.strip().split()[-1]
+
+
+def engine_warning(data):
+    """One warning line when the engine drifts from the validated contract,
+    None when it matches. A missing engine is handled by the retry row, not
+    here."""
+    ver = engine_version()
+    if ver is not None and ver != VALIDATED_ENGINE:
+        return "engine %s unvalidated (validated: %s)" % (ver, VALIDATED_ENGINE)
+    if isinstance(data, dict) and data.get("schemaVersion") != VALIDATED_SCHEMA_VERSION:
+        return "engine schema %s unvalidated (validated: %s)" % (
+            data.get("schemaVersion"), VALIDATED_SCHEMA_VERSION)
+    return None
+
+
 def active_org():
     try:
         with open(CLAUDE_JSON) as f:
@@ -146,6 +172,27 @@ def fmt_usage(u):
         if isinstance(win, dict) and win.get("pct") is not None:
             parts.append("%s %d%%" % (label_map.get(key, key), round(win["pct"])))
     return " - ".join(parts) if parts else "usage n/a"
+
+
+def usage_line(acc):
+    """Inline usage for one slot. cswap 0.25.x sets usage to null when the
+    live fetch fails and parks the last success in lastGoodUsage, with
+    usageStatus and lastGoodAgeSeconds explaining the failure."""
+    u = acc.get("usage")
+    if isinstance(u, dict):
+        return fmt_usage(u)
+    lg = acc.get("lastGoodUsage")
+    if not isinstance(lg, dict):
+        return "usage n/a"
+    try:
+        days = int(float(acc.get("lastGoodAgeSeconds")) // 86400)
+        stale = "stale %dd" % days if days >= 1 else "stale <1d"
+    except (TypeError, ValueError):
+        stale = "stale"
+    status = acc.get("usageStatus")
+    if status and status != "ok":
+        stale = "%s, %s" % (stale, str(status).replace("_", " "))
+    return "%s (%s)" % (fmt_usage(lg), stale)
 
 
 def summarize_codex(d):
@@ -190,12 +237,15 @@ class SwitchBar(rumps.App):
                 n = acc.get("number")
                 label = _lbl(SLOT_LABELS, n, "slot %s" % n)
                 mark = u"✓ " if acc.get("active") else "     "
-                title = "%s%s  -  %s" % (mark, label, fmt_usage(acc.get("usage")))
+                title = "%s%s  -  %s" % (mark, label, usage_line(acc))
                 cb = None if acc.get("active") else self._make_switch(n, label)
                 items.append(rumps.MenuItem(title, callback=cb))
         else:
             items.append(rumps.MenuItem("cswap unavailable - click to retry",
                                         callback=self.refresh))
+        warn = engine_warning(data)
+        if warn:
+            items.append(rumps.MenuItem(warn, callback=None))
         org, _u8 = active_org()
         self.title = u"⇄ %s" % _lbl(SHORT_LABELS, active_no, "?")
         items.append(rumps.separator)
