@@ -12,6 +12,10 @@ SHORT_LABELS = {1: "1", 2: "2"}                # menu bar title suffix
 # Uncomment to enable it (npx fetches ccusage from the npm registry):
 # CODEX_USAGE_CMD = ["npx", "-y", "ccusage@latest", "codex", "--json"]
 
+# Dry-run auto-switch narration is ON by default (notification plus click-log
+# line when the engine's auto mode would have switched; nothing is switched).
+# AUTO_NARRATE = False
+
 # The Codex row launches Ghostty by default. Point this at any terminal:
 # CODEX_LAUNCH_CMD = ["open", "-na", "Terminal", "--args", "-e", "codex"]
 # CODEX_LAUNCH_CMD = ["open", "-na", "iTerm", "--args", "-e", "codex"]

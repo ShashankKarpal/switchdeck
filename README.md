@@ -43,6 +43,14 @@
 - **Refresh on demand.** The manual Refresh also refreshes Codex when that row is enabled; the automatic timer never does.
 - **Codex row (opt-in, off by default).** Token and cost via ccusage; clicking it launches Codex in a terminal. Claude and Codex credentials coexist, so switching tools is a launch, not a credential swap.
 
+### Auto-switch narration (dry-run, on by default)
+
+- Each refresh tick asks the engine what its auto-switch mode **would** do (`cswap auto --once --dry-run --json`) and narrates the answer. Nothing is ever switched.
+- A notification like "Would switch slot 2 to slot 1, 5h at 91%" means the engine's threshold logic would have moved you right then. It fires once per distinct condition and repeats only after the condition clears and returns.
+- Every narrated event also lands in the local click log, so a week of notifications can be reviewed before trusting the real thing.
+- Real auto-switching stays off. It is the engine's feature, not this app's; enabling it is a deliberate engine-side decision (`cswap auto`), and its thresholds, cooldown, and strategy are engine config that this app neither reads nor sets.
+- Set `AUTO_NARRATE = False` in `local_settings.py` to silence narration entirely.
+
 ### Operations
 
 - **LaunchAgent for run at login.**
@@ -82,6 +90,7 @@ SHORT_LABELS = {1: "1", 2: "2"}                # menu bar title suffix
 # CSWAP_BIN = "/Users/YOU/.local/bin/cswap"
 # REFRESH_SECONDS = 300
 # CODEX_REFRESH_SECONDS = 1800
+# AUTO_NARRATE = False   # dry-run auto-switch narration is on by default
 # Codex row is off by default (no network calls in a stock install). Enable:
 # CODEX_USAGE_CMD = ["npx", "-y", "ccusage@latest", "codex", "--json"]
 # CODEX_LAUNCH_CMD = ["open", "-na", "Terminal", "--args", "-e", "codex"]  # default launcher is Ghostty; set your own terminal here

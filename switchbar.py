@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SwitchBar (switchdeck v1.7): menu bar account switcher + usage deck.
+"""SwitchBar (switchdeck v1.8): menu bar account switcher + usage deck.
 
 Wraps cswap (claude-swap) to switch between two same-email Claude Code
 accounts and shows per-account 5h/7d usage. Owns only the surface; the
@@ -14,6 +14,13 @@ and the click log records the live session count for later audit.
 v1.7: engine contract (claude-swap version and JSON schemaVersion pinned,
 one warning row on drift, lastGoodUsage fallback with staleness), and the
 Codex row made opt-in so a stock install makes zero network calls.
+
+v1.8: auto-switch narration, dry-run only. Each refresh tick additionally
+runs one engine auto evaluation (`cswap auto --once --dry-run --json`) and
+narrates the outcome: a would-switch raises one notification (deduped per
+condition) and a click-log line; errors and blocked outcomes get a click-log
+line and one silent menu row. The engine owns thresholds, cooldown, and
+strategy; this app never switches and configures none of them.
 """
 import datetime as _dt
 import json
@@ -44,6 +51,10 @@ CODEX_REFRESH_SECONDS = 1800
 CODEX_USAGE_CMD = None
 # Clicking the Codex row jumps into the tool: opens a terminal running codex.
 CODEX_LAUNCH_CMD = ["open", "-na", "Ghostty", "--args", "-e", "codex"]
+# Dry-run auto-switch narration (v1.8). True narrates what the engine's auto
+# mode would do each tick; nothing is ever switched. The only knob here is
+# off/on: thresholds, cooldown, and strategy are engine config, not ours.
+AUTO_NARRATE = True
 
 # Engine contract: the cswap release and JSON schemaVersion this build is
 # validated against (CLAUDE.md decision log). Drift shows a warning row and
@@ -55,7 +66,7 @@ try:
     import local_settings as _ls
     for _k in ("CSWAP_BIN", "SLOT_LABELS", "SHORT_LABELS", "CLICK_LOG",
                "REFRESH_SECONDS", "CODEX_REFRESH_SECONDS", "CODEX_USAGE_CMD",
-               "CODEX_LAUNCH_CMD"):
+               "CODEX_LAUNCH_CMD", "AUTO_NARRATE"):
         if hasattr(_ls, _k):
             globals()[_k] = getattr(_ls, _k)
 except ImportError:
@@ -132,6 +143,49 @@ def cswap_list():
     if "error" in data:
         return None
     return data
+
+
+def cswap_auto_dryrun():
+    """One dry-run tick of the engine's auto-switch. Emits one JSON event
+    per line (observed on 0.25.0: a `poll` snapshot, then a terminal
+    `switch` or `no-switch`); exit codes with --once are 0 switched,
+    1 error, 2 nothing to do, 3 blocked. --dry-run is hard-coded: the
+    engine evaluates and reports but never switches or writes state."""
+    rc, out, _err = _run([CSWAP_BIN, "auto", "--once", "--dry-run", "--json"])
+    events = []
+    for line in out.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(ev, dict):
+            events.append(ev)
+    return rc, events
+
+
+def driving_window(poll, slot_no):
+    """(window name, pct) that pushed a slot over the auto threshold, from
+    the poll event's windowsPct; the switch event itself does not carry it.
+    Falls back to the slot's highest window, or (None, None)."""
+    if not isinstance(poll, dict):
+        return None, None
+    wins = poll.get("windowsPct")
+    w = _lbl(wins, slot_no, None) if slot_no is not None else None
+    if not isinstance(w, dict):
+        return None, None
+    cands = {k: v for k, v in w.items() if isinstance(v, (int, float))}
+    if not cands:
+        return None, None
+    thr = poll.get("threshold")
+    if isinstance(thr, (int, float)):
+        over = {k: v for k, v in cands.items() if v >= thr}
+        if over:
+            cands = over
+    name = max(cands, key=cands.get)
+    return name, cands[name]
 
 
 def engine_version():
@@ -225,6 +279,11 @@ class SwitchBar(rumps.App):
     def __init__(self):
         super(SwitchBar, self).__init__("=", quit_button=None)
         self.codex_line = "Codex: not configured"
+        # Last notified would-switch condition: (from, to, driving window).
+        # In-memory only; a restart may re-notify once, accepted over
+        # persistence. Cleared on no-switch so a returning condition
+        # (window reset, then filled again) notifies again.
+        self._auto_key = None
         self.refresh_timer = rumps.Timer(self.refresh, REFRESH_SECONDS)
         self.refresh_timer.start()
         if CODEX_USAGE_CMD:
@@ -262,6 +321,10 @@ class SwitchBar(rumps.App):
         warn = engine_warning(data)
         if warn:
             items.append(rumps.MenuItem(warn, callback=None))
+        if AUTO_NARRATE:
+            auto_row = self._narrate_auto()
+            if auto_row:
+                items.append(rumps.MenuItem(auto_row, callback=None))
         org, _u8 = active_org()
         self.title = u"⇄ %s" % _lbl(SHORT_LABELS, active_no, "?")
         items.append(rumps.separator)
@@ -280,6 +343,46 @@ class SwitchBar(rumps.App):
         self.menu.clear()
         for it in items:
             self.menu.add(it)
+
+    def _narrate_auto(self):
+        """Narrate one engine auto dry-run tick. A would-switch notifies
+        once per distinct condition and always logs; poll and no-switch are
+        silent; error and blocked outcomes log and return one non-clickable
+        menu row string (never a notification). Returns None otherwise."""
+        rc, events = cswap_auto_dryrun()
+        poll = next((e for e in events if e.get("event") == "poll"), None)
+        final = next((e for e in reversed(events)
+                      if e.get("event") != "poll"), None)
+        kind = (final or {}).get("event")
+        if kind == "switch":
+            from_no = (final.get("from") or {}).get("number")
+            to_no = (final.get("to") or {}).get("number")
+            win, pct = driving_window(poll, from_no)
+            detail = ("%s at %d%%" % (win, round(pct)) if win
+                      else "threshold reached")
+            key = (from_no, to_no, win)
+            deduped = key == self._auto_key
+            log_click("auto-dryrun would-switch %s->%s %s%s"
+                      % (from_no, to_no, detail,
+                         " (deduped)" if deduped else ""))
+            if not deduped:
+                self._auto_key = key
+                _notify("SwitchBar", "Auto (dry-run)",
+                        "Would switch slot %s to slot %s, %s. "
+                        "No switch performed." % (from_no, to_no, detail))
+            return None
+        if kind == "no-switch" or rc == 2:
+            self._auto_key = None
+            return None
+        label = "blocked" if rc == 3 or kind == "blocked" else "error"
+        reason = ""
+        if isinstance(final, dict):
+            reason = str(final.get("reason") or final.get("detail")
+                         or final.get("error") or "").strip()
+        log_click("auto-dryrun %s rc=%s %s"
+                  % (label, rc, reason or kind or "no event"))
+        return ("auto dry-run %s: %s"
+                % (label, reason or "see click log"))[:80]
 
     def _make_switch(self, n, label):
         def _cb(_sender):
