@@ -1,5 +1,7 @@
 # Roadmap (behavior-gated)
 
+> Superseded 2026-08-17: the v2/v3 items and future candidates below were red-teamed and replaced; [docs/redteam-audit-2026-08-17.md](docs/redteam-audit-2026-08-17.md) (addendum) is the current plan.
+
 Each version ships only after the previous version's behavior signal is proven. One logged exception below.
 
 ## v0: validation, no build (PASSED technical checks)

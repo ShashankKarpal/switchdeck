@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
-"""SwitchBar (switchdeck v1.6): menu bar account switcher + usage deck.
+"""SwitchBar (switchdeck v1.7): menu bar account switcher + usage deck.
 
 Wraps cswap (claude-swap) to switch between two same-email Claude Code
-accounts, shows per-account 5h/7d usage, and a read-only Codex usage row.
-Owns only the surface; the engine is an upgradable dependency.
+accounts and shows per-account 5h/7d usage. Owns only the surface; the
+engine is an upgradable dependency validated against a pinned contract.
 
 v1.6: live-session awareness. A running Claude Code CLI caches its OAuth
 credential in memory (macOS Keychain cache is ~30s), so a switch does not
 apply to an already-running session instantly, and never mid-reply. When a
 switch succeeds while CLI sessions are live, the notification now says so,
 and the click log records the live session count for later audit.
+
+v1.7: engine contract (claude-swap version and JSON schemaVersion pinned,
+one warning row on drift, lastGoodUsage fallback with staleness), and the
+Codex row made opt-in so a stock install makes zero network calls.
 """
 import datetime as _dt
 import json
@@ -33,7 +37,11 @@ CLAUDE_JSON = os.path.join(HOME, ".claude.json")
 CLAUDE_SESSIONS_DIR = os.path.join(HOME, ".claude", "sessions")
 REFRESH_SECONDS = 300
 CODEX_REFRESH_SECONDS = 1800
-CODEX_USAGE_CMD = ["npx", "-y", "ccusage@latest", "codex", "--json"]
+# Codex row is opt-in: None means the row is never built, its timer never
+# starts, and a stock install makes zero network calls (the local-only
+# guarantee). Enable in local_settings.py, e.g.
+# CODEX_USAGE_CMD = ["npx", "-y", "ccusage@latest", "codex", "--json"]
+CODEX_USAGE_CMD = None
 # Clicking the Codex row jumps into the tool: opens a terminal running codex.
 CODEX_LAUNCH_CMD = ["open", "-na", "Ghostty", "--args", "-e", "codex"]
 
@@ -216,18 +224,26 @@ def summarize_codex(d):
 class SwitchBar(rumps.App):
     def __init__(self):
         super(SwitchBar, self).__init__("=", quit_button=None)
-        self.codex_line = "Codex: loading..."
+        self.codex_line = "Codex: not configured"
         self.refresh_timer = rumps.Timer(self.refresh, REFRESH_SECONDS)
-        self.codex_timer = rumps.Timer(self.refresh_codex, CODEX_REFRESH_SECONDS)
         self.refresh_timer.start()
-        self.codex_timer.start()
-        self.refresh_codex(None)
+        if CODEX_USAGE_CMD:
+            self.codex_line = "Codex: loading..."
+            self.codex_timer = rumps.Timer(self.refresh_codex, CODEX_REFRESH_SECONDS)
+            self.codex_timer.start()
+            self.refresh_codex(None)
         self.refresh(None)
 
     # ---- Claude accounts ----
+    def refresh_all(self, _sender=None):
+        """Manual Refresh only. The 300s timer and retry row call refresh()
+        directly; keeping Codex off that path is what holds the local-only
+        guarantee (a rumps Timer passes itself as sender, so sender
+        truthiness cannot distinguish a tick from a click)."""
+        self.refresh_codex()
+        self.refresh()
+
     def refresh(self, _sender=None):
-        if _sender is not None:
-            self.refresh_codex()
         data = cswap_list()
         items = []
         active_no = None
@@ -249,8 +265,9 @@ class SwitchBar(rumps.App):
         org, _u8 = active_org()
         self.title = u"⇄ %s" % _lbl(SHORT_LABELS, active_no, "?")
         items.append(rumps.separator)
-        items.append(rumps.MenuItem(self.codex_line + "  -  click to open",
-                                    callback=self._open_codex))
+        if CODEX_USAGE_CMD:
+            items.append(rumps.MenuItem(self.codex_line + "  -  click to open",
+                                        callback=self._open_codex))
         items.append(rumps.MenuItem("Active org: %s" % org, callback=None))
         live = live_claude_sessions()
         if live:
@@ -258,7 +275,7 @@ class SwitchBar(rumps.App):
                 "%d live CLI session(s): switch applies in ~30s, not mid-reply"
                 % len(live), callback=None))
         items.append(rumps.separator)
-        items.append(rumps.MenuItem("Refresh", callback=self.refresh))
+        items.append(rumps.MenuItem("Refresh", callback=self.refresh_all))
         items.append(rumps.MenuItem("Quit", callback=self._quit))
         self.menu.clear()
         for it in items:

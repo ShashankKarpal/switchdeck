@@ -8,7 +8,7 @@
 
 <h1 align="center">switchdeck</h1>
 
-<p align="center"><b>A macOS menu bar switcher for multiple Claude Code accounts, with an OpenAI Codex usage row and launcher.</b></p>
+<p align="center"><b>A macOS menu bar switcher for multiple Claude Code accounts, with an optional OpenAI Codex usage row and launcher.</b></p>
 
 <p align="center">
   <img alt="Platform" src="https://img.shields.io/badge/platform-macOS-0F7D74?style=flat-square">
@@ -22,9 +22,9 @@
 
 - Switches between Claude Code accounts from the menu bar in one click.
 - Shows 5 hour and 7 day usage for every account without opening a terminal.
-- Shows Codex token usage and cost in the same place (read-only; switching is Claude Code only).
-- Launches Codex in a terminal from the same menu.
 - Logs every switch locally, so usage is measured rather than remembered.
+- Makes zero network calls in a stock install: everything is read from local files and the local cswap engine.
+- Optional, off by default: a Codex token/cost row (read-only, via ccusage) that also launches Codex in a terminal. Enabling it opts into network calls to npm; see Configuration.
 
 ## Features
 
@@ -38,10 +38,10 @@
 
 ### Usage
 
-- **Claude quota windows** read from the engine's JSON output.
-- **Codex token and cost** read from ccusage.
-- **Refresh on demand,** which refreshes both Claude and Codex.
-- **Codex row launches the tool.** Claude and Codex credentials coexist, so switching tools is a launch, not a credential swap.
+- **Claude quota windows** read from the engine's JSON output, with a staleness marker when the engine serves a cached last-good value.
+- **Engine contract.** The validated cswap version and JSON schema are pinned; drift shows a warning row instead of failing silently.
+- **Refresh on demand.** The manual Refresh also refreshes Codex when that row is enabled; the automatic timer never does.
+- **Codex row (opt-in, off by default).** Token and cost via ccusage; clicking it launches Codex in a terminal. Claude and Codex credentials coexist, so switching tools is a launch, not a credential swap.
 
 ### Operations
 
@@ -52,8 +52,8 @@
 ## Stack
 
 - App: Python, rumps menu bar app
-- Credential engine: [claude-swap (cswap)](https://github.com/realiti4/claude-swap), installed via `uv tool install claude-swap`
-- Codex usage: ccusage
+- Credential engine: [claude-swap (cswap)](https://github.com/realiti4/claude-swap), installed via `uv tool install claude-swap`, validated version pinned in `switchbar.py`
+- Codex usage (opt-in): ccusage
 - Autostart: macOS LaunchAgent
 
 ## Install
@@ -70,7 +70,7 @@ cp com.shashank.switchbar.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.shashank.switchbar.plist
 ```
 
-The venv lives at `~/.switchdeck-venv`, which is where the LaunchAgent expects it. Edit the plist paths (`YOU`, and the repo path if you cloned somewhere other than `~/Documents/GitHub/switchdeck`) to match your machine before loading it.
+The venv lives at `~/.switchdeck-venv`, which is where the LaunchAgent expects it. Edit the plist before loading it: replace `YOU` with your macOS username and point the two `switchdeck` paths at wherever you cloned the repo.
 
 ## Configuration
 
@@ -82,7 +82,8 @@ SHORT_LABELS = {1: "1", 2: "2"}                # menu bar title suffix
 # CSWAP_BIN = "/Users/YOU/.local/bin/cswap"
 # REFRESH_SECONDS = 300
 # CODEX_REFRESH_SECONDS = 1800
-# CODEX_USAGE_CMD = None   # disable the Codex row
+# Codex row is off by default (no network calls in a stock install). Enable:
+# CODEX_USAGE_CMD = ["npx", "-y", "ccusage@latest", "codex", "--json"]
 # CODEX_LAUNCH_CMD = ["open", "-na", "Terminal", "--args", "-e", "codex"]  # default launcher is Ghostty; set your own terminal here
 ```
 
@@ -90,7 +91,7 @@ Real account labels stay in the local copy only. Nothing in this repository iden
 
 ## Usage
 
-Click the menu bar item. Each account row shows usage and switches on click. The Codex row shows usage and opens a terminal running Codex. Refresh updates both.
+Click the menu bar item. Each account row shows usage and switches on click. With the opt-in Codex row enabled, it shows usage and opens a terminal running Codex, and Refresh updates both.
 
 ## Project structure
 
@@ -115,7 +116,7 @@ Every version must prove one human behavior changed, not that a feature shipped.
 |---|---|---|
 | v0 | Engine validated, round-trip switching works | Shipped |
 | v1.5 | Menu bar switcher and Codex usage row | Shipped |
-| v2 | Codex quota windows, desktop widget, auto-switch | Gated |
+| v2+ | Superseded: [docs/redteam-audit-2026-08-17.md](docs/redteam-audit-2026-08-17.md) is the decided plan | Superseded |
 
 One gate exception has been taken and is logged with its reason in [CLAUDE.md](CLAUDE.md).
 
