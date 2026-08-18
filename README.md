@@ -11,11 +11,11 @@
 <p align="center"><b>A macOS menu bar switcher for multiple Claude Code accounts, with an optional OpenAI Codex usage row and launcher.</b></p>
 
 <p align="center">
-  <img alt="Platform" src="https://img.shields.io/badge/platform-macOS-0F7D74?style=flat-square">
-  <img alt="Status" src="https://img.shields.io/badge/status-v1.5-0F7D74?style=flat-square">
-  <img alt="Local only" src="https://img.shields.io/badge/local-only-0F7D74?style=flat-square">
-  <img alt="Stack" src="https://img.shields.io/badge/built%20with-Python-1C1B1D?style=flat-square">
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-1C1B1D?style=flat-square"></a>
+  <img alt="Platform" src="https://img.shields.io/badge/platform-macOS-2D647F?style=flat-square">
+  <img alt="Status" src="https://img.shields.io/badge/status-v1.5-2D647F?style=flat-square">
+  <img alt="Local only" src="https://img.shields.io/badge/local-only-2D647F?style=flat-square">
+  <img alt="Stack" src="https://img.shields.io/badge/built%20with-Python-1A1917?style=flat-square">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-1A1917?style=flat-square"></a>
 </p>
 
 ## What it does
