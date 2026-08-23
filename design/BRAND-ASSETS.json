@@ -1,0 +1,91 @@
+{
+  "assets": [
+    {
+      "destination": "design/github/readme-banner-dark-1400x400.png",
+      "destinationSha256": "241d4ed98c17087baee271071afc73542654486d79906c54068419f1c9296ef4",
+      "mode": "copy",
+      "source": "design/marks/out/switchdeck/web/banner-dark-1400x400.png",
+      "sourceSha256": "241d4ed98c17087baee271071afc73542654486d79906c54068419f1c9296ef4"
+    },
+    {
+      "destination": "design/github/readme-banner-dark-1400x400.svg",
+      "destinationSha256": "a626ce180482ba3a4c9dc4dcb956d5ba5d67af7a32538cfe747ae65e38f4fa0e",
+      "mode": "copy",
+      "source": "design/marks/out/switchdeck/web/banner-dark-1400x400.svg",
+      "sourceSha256": "a626ce180482ba3a4c9dc4dcb956d5ba5d67af7a32538cfe747ae65e38f4fa0e"
+    },
+    {
+      "destination": "design/github/readme-banner-light-1400x400.png",
+      "destinationSha256": "87610aec2b768604c2ff62cbd7a077807559a7a5f0811cb69b2fd91362052bbd",
+      "mode": "copy",
+      "source": "design/marks/out/switchdeck/web/banner-light-1400x400.png",
+      "sourceSha256": "87610aec2b768604c2ff62cbd7a077807559a7a5f0811cb69b2fd91362052bbd"
+    },
+    {
+      "destination": "design/github/readme-banner-light-1400x400.svg",
+      "destinationSha256": "cc08fcb372ae8e2dbf19f6f2ae7bf1bf56ee009ca03f441a06802a7779abb580",
+      "mode": "copy",
+      "source": "design/marks/out/switchdeck/web/banner-light-1400x400.svg",
+      "sourceSha256": "cc08fcb372ae8e2dbf19f6f2ae7bf1bf56ee009ca03f441a06802a7779abb580"
+    },
+    {
+      "destination": "design/github/social-preview-1280x640.png",
+      "destinationSha256": "7d09989a71d4e1e63397daaa4e36190279d62f980f903a1b8126d1f26fc1b9ba",
+      "mode": "copy",
+      "source": "design/marks/out/switchdeck/web/social-preview-1280x640.png",
+      "sourceSha256": "7d09989a71d4e1e63397daaa4e36190279d62f980f903a1b8126d1f26fc1b9ba"
+    },
+    {
+      "destination": "design/logo/switchdeck-lockup-horizontal-dark.svg",
+      "destinationSha256": "797df49f77c52bfa80df9c38650c29869fcbe134073df6882be954fbef3a1ff6",
+      "mode": "copy",
+      "source": "design/marks/out/switchdeck/wordmark/wordmark-horizontal-dark.svg",
+      "sourceSha256": "797df49f77c52bfa80df9c38650c29869fcbe134073df6882be954fbef3a1ff6"
+    },
+    {
+      "destination": "design/logo/switchdeck-lockup-horizontal.svg",
+      "destinationSha256": "2e4b1a1e3afc639d009d5b24351fac4bc8f8b93efff97f24feaeeb793d7910af",
+      "mode": "copy",
+      "source": "design/marks/out/switchdeck/wordmark/wordmark-horizontal-light.svg",
+      "sourceSha256": "2e4b1a1e3afc639d009d5b24351fac4bc8f8b93efff97f24feaeeb793d7910af"
+    },
+    {
+      "destination": "design/logo/switchdeck-symbol-dark.svg",
+      "destinationSha256": "7af02d157406b2cff23fdc3a7e239be55a4927d41d6ce3e8343b5cf2a89783af",
+      "mode": "copy",
+      "source": "design/marks/out/switchdeck/svg/mark.svg",
+      "sourceSha256": "7af02d157406b2cff23fdc3a7e239be55a4927d41d6ce3e8343b5cf2a89783af"
+    },
+    {
+      "destination": "design/logo/switchdeck-symbol-mono-black.svg",
+      "destinationSha256": "0c6f237b9a3db0ccf2bb38885b0789372f1a039cd8f021005714c52494bff5ac",
+      "mode": "copy",
+      "source": "design/marks/out/switchdeck/svg/mark-mono.svg",
+      "sourceSha256": "0c6f237b9a3db0ccf2bb38885b0789372f1a039cd8f021005714c52494bff5ac"
+    },
+    {
+      "destination": "design/logo/switchdeck-symbol.svg",
+      "destinationSha256": "722771fb0613e43ad2723857d06e3175ad70d83f258483928b6e019056fe3e76",
+      "mode": "copy",
+      "source": "design/marks/out/switchdeck/svg/mark-light.svg",
+      "sourceSha256": "722771fb0613e43ad2723857d06e3175ad70d83f258483928b6e019056fe3e76"
+    },
+    {
+      "destination": "design/web/favicon.svg",
+      "destinationSha256": "6e1f27b2f59014080505d38f26cbb26ae55c7e80c9de743635e7b7a3030ca3af",
+      "mode": "copy",
+      "source": "design/marks/out/switchdeck/web/favicon.svg",
+      "sourceSha256": "6e1f27b2f59014080505d38f26cbb26ae55c7e80c9de743635e7b7a3030ca3af"
+    }
+  ],
+  "brandVersion": "1.1.0",
+  "canonicalSourceCommit": "31d19c52a2565d0f4ba200ecde6be8b32af6b1f4",
+  "canonicalSourceDirty": true,
+  "contentSetSha256": "02410e16a84643eeec55daf7163a3e7693a27cc180fda7c678cb496eaba4a695",
+  "generatorSha256": "0e6a2b10c9b320f5edb2c351e69d3aab55391d372a338dd62f792ce7f8974701",
+  "lockSha256": "d8574f93ee9b99d1758cfbb20da047518e49df75c0cd8a5ac5697b397542a802",
+  "project": "switchdeck",
+  "schemaVersion": 1,
+  "tokenSha256": "4436a3733ac7810580b0c586b7c044e8bb737c25e21ec33176127095f4bf6f23",
+  "visibility": "public"
+}
