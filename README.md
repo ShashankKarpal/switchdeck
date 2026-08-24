@@ -74,11 +74,13 @@ cd switchdeck
 scripts/install.sh
 ```
 
-That installs the engine, builds the venv at `~/.switchdeck-venv` against a uv-managed Python, writes the Info.plist that notifications need, renders the LaunchAgent with your real paths, boots it, and fails loudly if the app did not come up. Re-run it any time to repair an install; add `--rebuild` to recreate the venv from scratch.
+That installs the engine, builds the package venv at `~/.switchdeck-venv` against a uv-managed Python, builds `~/Applications/SwitchDeck.app` (a minimal signed bundle whose executable is a copy of that same static CPython, with the brand icon), renders the LaunchAgent with your real paths, boots it, and fails loudly if the app did not come up. Re-run it any time to repair an install; add `--rebuild` to recreate the venv from scratch. On first run macOS asks to allow SwitchDeck notifications; the answer is recorded in the click log.
 
 Then edit `local_settings.py` (created for you on first run) to set your account labels.
 
-Why a script rather than a copied plist: the venv is outside the repo and depends on an interpreter that a package manager can remove underneath it. When that happened here, launchd failed to spawn with exit code 78 and, because a menu bar app has no window to miss, nothing announced it. The script rebuilds every piece that a hand install gets wrong, including the Info.plist a manual `python -m venv` never creates.
+Why a bundle: macOS only registers notification identities for real, LaunchServices-registered app bundles. An unbundled interpreter can call the notification APIs successfully while the system files every banner into Notification Center without presenting one, which is exactly what happened here for a year. The bundle also gives the process a real name in the menu bar layout tools instead of `python3`.
+
+Why a script rather than a copied plist: the venv is outside the repo and depends on an interpreter that a package manager can remove underneath it. When that happened here, launchd failed to spawn with exit code 78 and, because a menu bar app has no window to miss, nothing announced it. The script rebuilds every piece a hand install gets wrong, and proves the result is running before it reports success.
 
 ## Configuration
 

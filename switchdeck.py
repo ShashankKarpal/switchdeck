@@ -63,12 +63,15 @@ REFRESH_SECONDS = 300
 CODEX_REFRESH_SECONDS = 1800
 
 # Notification identity. APP_NAME is the one name this product answers to,
-# in the process list, the notification banner, and the LaunchAgent label.
-# BUNDLE_ID goes into the Info.plist that rumps needs to resolve a
-# notification centre; macOS groups and permissions the banners by it, so
-# changing it resets the user's notification choices for this app.
+# in the process list, the notification banner, and the app bundle.
+# BUNDLE_ID is the bundle's identity; macOS keys notification permission to
+# it, so changing it resets the user's notification choices for this app.
+# Changed once, deliberately, 2026-08-24: com.shashank.switchdeck carried a
+# stale system-level notification DENIAL (authorizationStatus=1 with no way
+# to re-prompt), so the identity moved to the com.shashankkarpal.* namespace
+# the rest of the fleet uses, which starts notDetermined and prompts.
 APP_NAME = "SwitchDeck"
-BUNDLE_ID = "com.shashank.switchdeck"
+BUNDLE_ID = "com.shashankkarpal.switchdeck"
 # Sound for the osascript fallback path. rumps' own notifications carry the
 # system default alert sound; this only applies when rumps is unavailable.
 # None means the fallback is silent.
@@ -108,9 +111,25 @@ def _lbl(d, n, default):
     return d.get(n, d.get(str(n), default))
 
 
+def _child_env():
+    """Environment for subprocesses, without our interpreter's variables.
+
+    When this app runs from the .app bundle, PYTHONHOME and PYTHONPATH wire
+    the bundled interpreter to its stdlib and site-packages. Inherited by a
+    child Python such as cswap's own venv interpreter, those same variables
+    override the child's environment and break its imports. Scrub them for
+    every child; non-Python children ignore them anyway.
+    """
+    env = dict(os.environ)
+    env.pop("PYTHONHOME", None)
+    env.pop("PYTHONPATH", None)
+    return env
+
+
 def _run(cmd, timeout=30):
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(cmd, capture_output=True, text=True,
+                           timeout=timeout, env=_child_env())
         return p.returncode, p.stdout, p.stderr
     except Exception as e:  # noqa: BLE001 - surface anything to the UI
         return 1, "", str(e)
@@ -131,8 +150,20 @@ def ensure_notification_bundle():
     (ok, detail) for the click log; never raises.
     """
     try:
-        path = os.path.join(os.path.dirname(os.path.abspath(sys.executable)),
-                            "Info.plist")
+        exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+        # Inside a real .app bundle (the shipped configuration since v1.9.1)
+        # the identity comes from Contents/Info.plist and the bundle is
+        # code-signed; writing anything into Contents/MacOS would break the
+        # signature. Detect and leave it alone.
+        bundle_plist = os.path.join(os.path.dirname(exe_dir), "Info.plist")
+        if os.path.basename(exe_dir) == "MacOS" and os.path.exists(bundle_plist):
+            try:
+                with open(bundle_plist, "rb") as f:
+                    bid = plistlib.load(f).get("CFBundleIdentifier")
+            except Exception:  # noqa: BLE001
+                bid = None
+            return True, "bundled (%s)" % (bid or "unreadable Info.plist")
+        path = os.path.join(exe_dir, "Info.plist")
         if os.path.exists(path):
             try:
                 with open(path, "rb") as f:
@@ -170,21 +201,82 @@ def _notify_fallback(title, subtitle, message):
     return rc == 0, (err or "").strip()[:120]
 
 
+def request_notify_authorization():
+    """Ask the modern notification centre for banner and sound rights.
+
+    Runs once at startup, from the .app bundle. First launch under a fresh
+    identity raises the standard macOS prompt; the user's answer is keyed to
+    BUNDLE_ID and remembered. The outcome always lands in the click log,
+    including a denial, because a denied identity looks exactly like broken
+    code unless something says otherwise (that is how the 2026-08-24 stale
+    denial hid). Returns nothing; never raises."""
+    try:
+        import UserNotifications as UN
+        center = UN.UNUserNotificationCenter.currentNotificationCenter()
+
+        def _cb(granted, error):
+            log_click("notify authorization granted=%s%s"
+                      % (granted, " error=%s" % error if error else ""))
+            if not granted:
+                log_click("notify DENIED for %s: enable it in System "
+                          "Settings > Notifications > %s"
+                          % (BUNDLE_ID, APP_NAME))
+
+        opts = UN.UNAuthorizationOptionAlert | UN.UNAuthorizationOptionSound
+        center.requestAuthorizationWithOptions_completionHandler_(opts, _cb)
+    except Exception as e:  # noqa: BLE001 - never block startup
+        log_click("notify authorization request failed: %s: %s"
+                  % (type(e).__name__, str(e).splitlines()[0][:100]))
+
+
+def _notify_modern(title, subtitle, message):
+    """Post via UserNotifications (banner plus default sound). Requires the
+    .app bundle and granted authorization. Raises on any setup failure so
+    the caller can fall back; posting errors are reported asynchronously by
+    the centre into the click log."""
+    import UserNotifications as UN
+    content = UN.UNMutableNotificationContent.alloc().init()
+    content.setTitle_(str(title))
+    if subtitle:
+        content.setSubtitle_(str(subtitle))
+    content.setBody_(str(message))
+    content.setSound_(UN.UNNotificationSound.defaultSound())
+    req = UN.UNNotificationRequest.requestWithIdentifier_content_trigger_(
+        "switchdeck-%f" % _dt.datetime.now().timestamp(), content, None)
+
+    def _cb(error):
+        if error:
+            log_click("notify post error: %s" % error)
+
+    center = UN.UNUserNotificationCenter.currentNotificationCenter()
+    center.addNotificationRequest_withCompletionHandler_(req, _cb)
+
+
 def _notify(title, subtitle, message):
-    """Notify, then fall back, then leave evidence.
+    """Notify: modern centre first, legacy rumps second, osascript last,
+    and evidence in the click log for every fallback.
 
     Notifications stay best-effort (a revoked permission must never crash
-    the bar) but they are no longer silent on failure: every failed path
-    lands in the click log, because a swallowed exception here is exactly
-    what hid a year of undelivered notifications."""
+    the bar) but they are never silent on failure: a swallowed exception
+    here is exactly what hid a year of undelivered notifications, and a
+    legacy-only path is exactly what filed banners into Notification Center
+    without ever presenting one (found 2026-08-24: NSUserNotification on
+    Tahoe stores but does not present for identities without modern
+    authorization)."""
     try:
-        rumps.notification(title, subtitle, message)
+        _notify_modern(title, subtitle, message)
         return
     except Exception as e:  # noqa: BLE001 - any failure falls through
-        primary = "%s: %s" % (type(e).__name__, str(e).splitlines()[0][:100])
+        modern = "%s: %s" % (type(e).__name__, str(e).splitlines()[0][:80])
+    try:
+        rumps.notification(title, subtitle, message)
+        log_click("notify via legacy centre (modern failed: %s)" % modern)
+        return
+    except Exception as e:  # noqa: BLE001 - any failure falls through
+        legacy = "%s: %s" % (type(e).__name__, str(e).splitlines()[0][:80])
     ok, detail = _notify_fallback(title, subtitle, message)
-    log_click("notify %s via osascript (rumps failed: %s)%s"
-              % ("ok" if ok else "FAILED", primary,
+    log_click("notify %s via osascript (modern: %s; legacy: %s)%s"
+              % ("ok" if ok else "FAILED", modern, legacy,
                  "" if ok else " fallback: %s" % detail))
 
 
@@ -583,4 +675,5 @@ if __name__ == "__main__":
     _ok, _detail = ensure_notification_bundle()
     log_click("start %s notification-bundle %s: %s"
               % (APP_NAME, "ok" if _ok else "FAILED", _detail))
+    request_notify_authorization()
     SwitchDeck().run()

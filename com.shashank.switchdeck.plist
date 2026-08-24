@@ -4,14 +4,23 @@
 <dict>
   <key>Label</key><string>com.shashank.switchdeck</string>
   <!-- Do not hand-edit and copy this file. scripts/install.sh renders it
-       with your real username and clone path, then boots it. This tracked
-       copy is the template: YOU and the repo path are placeholders, and a
-       plist loaded with them still in place fails to spawn.
-       Label renamed from com.shashank.switchbar on 2026-08-24; the old
-       label must be booted out before the new one is bootstrapped. -->
+       with your real username, clone path, and interpreter, then boots it.
+       This tracked copy is the template: YOU and the paths are
+       placeholders, and a plist loaded with them still in place fails to
+       spawn.
+
+       Since v1.9.1 the program is the SwitchDeck.app bundle executable, a
+       copy of the uv-managed static CPython. macOS only registers
+       notification identities for real, LaunchServices-registered app
+       bundles, so an unbundled interpreter cannot show banners at all (it
+       files notifications into Notification Center silently). The bundle
+       holds only the executable, Info.plist, and icon, because codesign
+       rejects data files elsewhere; stdlib and site-packages are wired by
+       the PYTHONHOME and PYTHONPATH variables below, and switchdeck.py
+       scrubs both from every child process so they cannot poison cswap. -->
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/YOU/.switchdeck-venv/bin/python3</string>
+    <string>/Users/YOU/Applications/SwitchDeck.app/Contents/MacOS/SwitchDeck</string>
     <string>/Users/YOU/Projects-with-Claude/switchdeck/switchdeck.py</string>
   </array>
   <key>WorkingDirectory</key><string>/Users/YOU/Projects-with-Claude/switchdeck</string>
@@ -28,6 +37,10 @@
   <dict>
     <key>PATH</key>
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/Users/YOU/.local/bin</string>
+    <key>PYTHONHOME</key>
+    <string>/Users/YOU/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none</string>
+    <key>PYTHONPATH</key>
+    <string>/Users/YOU/.switchdeck-venv/lib/python3.14/site-packages</string>
   </dict>
 </dict>
 </plist>
