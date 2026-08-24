@@ -60,25 +60,25 @@
 ## Stack
 
 - App: Python, rumps menu bar app
-- Credential engine: [claude-swap (cswap)](https://github.com/realiti4/claude-swap), installed via `uv tool install claude-swap`, validated version pinned in `switchbar.py`
+- Credential engine: [claude-swap (cswap)](https://github.com/realiti4/claude-swap), installed via `uv tool install claude-swap`, validated version pinned in `switchdeck.py`
 - Codex usage (opt-in): ccusage
 - Autostart: macOS LaunchAgent
 
 ## Install
 
-Requires: macOS, Python 3.11 or later, `uv`.
+Requires: macOS, `uv`.
 
 ```bash
 git clone https://github.com/ShashankKarpal/switchdeck.git
 cd switchdeck
-uv tool install claude-swap
-python3 -m venv ~/.switchdeck-venv && ~/.switchdeck-venv/bin/pip install rumps
-cp local_settings.example.py local_settings.py
-cp com.shashank.switchbar.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.shashank.switchbar.plist
+scripts/install.sh
 ```
 
-The venv lives at `~/.switchdeck-venv`, which is where the LaunchAgent expects it. Edit the plist before loading it: replace `YOU` with your macOS username and point the two `switchdeck` paths at wherever you cloned the repo.
+That installs the engine, builds the venv at `~/.switchdeck-venv` against a uv-managed Python, writes the Info.plist that notifications need, renders the LaunchAgent with your real paths, boots it, and fails loudly if the app did not come up. Re-run it any time to repair an install; add `--rebuild` to recreate the venv from scratch.
+
+Then edit `local_settings.py` (created for you on first run) to set your account labels.
+
+Why a script rather than a copied plist: the venv is outside the repo and depends on an interpreter that a package manager can remove underneath it. When that happened here, launchd failed to spawn with exit code 78 and, because a menu bar app has no window to miss, nothing announced it. The script rebuilds every piece that a hand install gets wrong, including the Info.plist a manual `python -m venv` never creates.
 
 ## Configuration
 
@@ -105,9 +105,10 @@ Click the menu bar item. Each account row shows usage and switches on click. Wit
 ## Project structure
 
 ```
-switchbar.py                    the rumps menu bar app
+switchdeck.py                   the rumps menu bar app
+scripts/install.sh              install or repair, idempotent
 local_settings.example.py       label and path placeholders
-com.shashank.switchbar.plist    LaunchAgent for run at login
+com.shashank.switchdeck.plist   LaunchAgent template for run at login
 design/                         brand assets, tokens, BRAND.md
 ROADMAP.md                      behavior gates per version
 CLAUDE.md                       decision log, deliberately public

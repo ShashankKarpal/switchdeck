@@ -21,10 +21,27 @@ narrates the outcome: a would-switch raises one notification (deduped per
 condition) and a click-log line; errors and blocked outcomes get a click-log
 line and one silent menu row. The engine owns thresholds, cooldown, and
 strategy; this app never switches and configures none of them.
+
+v1.9: notifications made real, and the resume card. The 2026-08-17 audit
+left one item UNVERIFIED: whether a rumps notification renders on macOS
+Tahoe 26 from this unbundled Python app. Tested 2026-08-24 on 26.6.2: it
+does NOT. rumps resolves its notification centre through an Info.plist
+beside the running interpreter, and a venv has none, so every notification
+this app has ever fired raised RuntimeError into the swallow at _notify and
+nothing drew. Fixed without bundling: the app writes that one-key
+Info.plist next to sys.executable at startup (idempotent, survives a venv
+rebuild), falls back to osascript when the centre is still unavailable, and
+records every notification failure in the click log instead of hiding it.
+A silent notification path is now impossible to have without evidence.
+With delivery proven, the audit's resume card ships: a switch notification
+names the target slot, the verified active org, live CLI session count, and
+the project you were last working in, degrading to the previous text on any
+parse failure.
 """
 import datetime as _dt
 import json
 import os
+import plistlib
 import subprocess
 import sys
 import threading
@@ -44,6 +61,18 @@ CLAUDE_JSON = os.path.join(HOME, ".claude.json")
 CLAUDE_SESSIONS_DIR = os.path.join(HOME, ".claude", "sessions")
 REFRESH_SECONDS = 300
 CODEX_REFRESH_SECONDS = 1800
+
+# Notification identity. APP_NAME is the one name this product answers to,
+# in the process list, the notification banner, and the LaunchAgent label.
+# BUNDLE_ID goes into the Info.plist that rumps needs to resolve a
+# notification centre; macOS groups and permissions the banners by it, so
+# changing it resets the user's notification choices for this app.
+APP_NAME = "SwitchDeck"
+BUNDLE_ID = "com.shashank.switchdeck"
+# Sound for the osascript fallback path. rumps' own notifications carry the
+# system default alert sound; this only applies when rumps is unavailable.
+# None means the fallback is silent.
+NOTIFY_FALLBACK_SOUND = "Ping"
 # Codex row is opt-in: None means the row is never built, its timer never
 # starts, and a stock install makes zero network calls (the local-only
 # guarantee). Enable in local_settings.py, e.g.
@@ -66,7 +95,7 @@ try:
     import local_settings as _ls
     for _k in ("CSWAP_BIN", "SLOT_LABELS", "SHORT_LABELS", "CLICK_LOG",
                "REFRESH_SECONDS", "CODEX_REFRESH_SECONDS", "CODEX_USAGE_CMD",
-               "CODEX_LAUNCH_CMD", "AUTO_NARRATE"):
+               "CODEX_LAUNCH_CMD", "AUTO_NARRATE", "NOTIFY_FALLBACK_SOUND"):
         if hasattr(_ls, _k):
             globals()[_k] = getattr(_ls, _k)
 except ImportError:
@@ -87,11 +116,76 @@ def _run(cmd, timeout=30):
         return 1, "", str(e)
 
 
+def ensure_notification_bundle():
+    """Give rumps an Info.plist to find, next to the running interpreter.
+
+    rumps resolves NSUserNotificationCenter through the Info.plist beside
+    sys.executable and needs CFBundleIdentifier in it. A venv has no such
+    file, so notifications raise RuntimeError and, before v1.9, vanished
+    into the swallow below. Writing the two keys is the whole fix short of
+    shipping a real .app bundle, which the 2026-08-17 audit deferred to the
+    Swift rewrite.
+
+    Idempotent, and deliberately re-run at every startup: the file lives in
+    the venv, not the repo, so a venv rebuild silently removes it. Returns
+    (ok, detail) for the click log; never raises.
+    """
+    try:
+        path = os.path.join(os.path.dirname(os.path.abspath(sys.executable)),
+                            "Info.plist")
+        if os.path.exists(path):
+            try:
+                with open(path, "rb") as f:
+                    have = plistlib.load(f).get("CFBundleIdentifier")
+            except Exception:  # noqa: BLE001 - unreadable counts as absent
+                have = None
+            if have:
+                return True, "present (%s)" % have
+        with open(path, "wb") as f:
+            plistlib.dump({"CFBundleIdentifier": BUNDLE_ID,
+                           "CFBundleName": APP_NAME}, f)
+        return True, "written %s" % path
+    except Exception as e:  # noqa: BLE001 - never block startup on this
+        return False, "%s: %s" % (type(e).__name__, e)
+
+
+def _notify_fallback(title, subtitle, message):
+    """Post a banner without rumps, for when the notification centre is
+    unavailable to this process. Shows under whichever app owns osascript
+    rather than under our own identity, which is the cost of not bundling;
+    it is still better than silence. Text is passed as osascript variables,
+    never interpolated into the source, so quotes in an engine error
+    message cannot break or inject into the script."""
+    script = ('on run argv\n'
+              '  display notification (item 3 of argv) '
+              'with title (item 1 of argv) subtitle (item 2 of argv)')
+    if NOTIFY_FALLBACK_SOUND:
+        script += ' sound name (item 4 of argv)'
+    script += '\nend run'
+    args = ["/usr/bin/osascript", "-e", script,
+            str(title), str(subtitle), str(message)]
+    if NOTIFY_FALLBACK_SOUND:
+        args.append(str(NOTIFY_FALLBACK_SOUND))
+    rc, _out, err = _run(args, timeout=10)
+    return rc == 0, (err or "").strip()[:120]
+
+
 def _notify(title, subtitle, message):
+    """Notify, then fall back, then leave evidence.
+
+    Notifications stay best-effort (a revoked permission must never crash
+    the bar) but they are no longer silent on failure: every failed path
+    lands in the click log, because a swallowed exception here is exactly
+    what hid a year of undelivered notifications."""
     try:
         rumps.notification(title, subtitle, message)
-    except Exception:
-        pass  # notifications are best-effort; never crash the bar
+        return
+    except Exception as e:  # noqa: BLE001 - any failure falls through
+        primary = "%s: %s" % (type(e).__name__, str(e).splitlines()[0][:100])
+    ok, detail = _notify_fallback(title, subtitle, message)
+    log_click("notify %s via osascript (rumps failed: %s)%s"
+              % ("ok" if ok else "FAILED", primary,
+                 "" if ok else " fallback: %s" % detail))
 
 
 def _pid_alive(pid):
@@ -217,6 +311,42 @@ def active_org():
         return "?", "?"
 
 
+def last_project():
+    """Basename of the project directory with the most recent Claude Code
+    start time, for the resume card.
+
+    Reads only ~/.claude.json, which this app already opens for the active
+    org, and returns None on anything unexpected: the notification loses
+    one clause, nothing else. Claude Code writes lastStartTime as epoch
+    milliseconds (verified 2026-08-24, 11 of 17 projects carry it), but the
+    type is not contractual, so the comparison coerces and skips whatever
+    will not coerce. HOME is excluded: "shashank.kk" names no project and
+    reads as a bug in a banner.
+    """
+    try:
+        with open(CLAUDE_JSON) as f:
+            projects = json.load(f).get("projects")
+        if not isinstance(projects, dict):
+            return None
+        best, best_at = None, None
+        for path, meta in projects.items():
+            if not isinstance(meta, dict) or not isinstance(path, str):
+                continue
+            if os.path.normpath(path) == os.path.normpath(HOME):
+                continue
+            try:
+                at = float(meta.get("lastStartTime"))
+            except (TypeError, ValueError):
+                continue
+            if best_at is None or at > best_at:
+                best, best_at = path, at
+        if not best:
+            return None
+        return os.path.basename(best.rstrip("/")) or best
+    except Exception:  # noqa: BLE001 - cosmetic data, never fatal
+        return None
+
+
 def log_click(text):
     try:
         with open(CLICK_LOG, "a") as f:
@@ -275,9 +405,9 @@ def summarize_codex(d):
     return " - ".join(bits) if bits else "connected"
 
 
-class SwitchBar(rumps.App):
+class SwitchDeck(rumps.App):
     def __init__(self):
-        super(SwitchBar, self).__init__("=", quit_button=None)
+        super(SwitchDeck, self).__init__("=", quit_button=None)
         self.codex_line = "Codex: not configured"
         # Last notified would-switch condition: (from, to, driving window).
         # In-memory only; a restart may re-notify once, accepted over
@@ -367,7 +497,7 @@ class SwitchBar(rumps.App):
                          " (deduped)" if deduped else ""))
             if not deduped:
                 self._auto_key = key
-                _notify("SwitchBar", "Auto (dry-run)",
+                _notify(APP_NAME, "Auto (dry-run)",
                         "Would switch slot %s to slot %s, %s. "
                         "No switch performed." % (from_no, to_no, detail))
             return None
@@ -394,18 +524,24 @@ class SwitchBar(rumps.App):
                 pass
             if ok:
                 live = live_claude_sessions()
-                log_click("menubar switch-to %s (%s) live_cli=%d"
-                          % (n, label, len(live)))
+                proj = last_project()
+                log_click("menubar switch-to %s (%s) live_cli=%d project=%s"
+                          % (n, label, len(live), proj or "-"))
                 org, u8 = active_org()
+                # Resume card: what you need to carry on, in one banner.
+                # Org is the proof the switch landed; the live-session line
+                # is the one thing that changes what you do next, so it
+                # stays first when it applies.
                 if live:
-                    _notify("SwitchBar", "Switched to %s" % label,
-                            "%d live CLI session(s): applies in ~30s, "
+                    body = ("%d live CLI session(s): applies in ~30s, "
                             "not mid-reply." % len(live))
                 else:
-                    _notify("SwitchBar", "Switched to %s" % label,
-                            "Active org: %s (%s...)" % (org, u8))
+                    body = "Active org: %s (%s...)" % (org, u8)
+                if proj:
+                    body = "%s Last project: %s." % (body, proj)
+                _notify(APP_NAME, "Switched to %s" % label, body)
             else:
-                _notify("SwitchBar", "Switch failed",
+                _notify(APP_NAME, "Switch failed",
                         (err or out or "unknown error").strip()[:120])
             self.refresh(None)
         return _cb
@@ -434,9 +570,9 @@ class SwitchBar(rumps.App):
         log_click("menubar open codex")
         rc, _out, err = _run(CODEX_LAUNCH_CMD, timeout=15)
         if rc == 0:
-            _notify("SwitchBar", "Codex", "Opening Codex")
+            _notify(APP_NAME, "Codex", "Opening Codex")
         else:
-            _notify("SwitchBar", "Codex launch failed", (err or "check CODEX_LAUNCH_CMD")[:120])
+            _notify(APP_NAME, "Codex launch failed", (err or "check CODEX_LAUNCH_CMD")[:120])
 
     def _quit(self, _sender):
         log_click("menubar quit")
@@ -444,4 +580,7 @@ class SwitchBar(rumps.App):
 
 
 if __name__ == "__main__":
-    SwitchBar().run()
+    _ok, _detail = ensure_notification_bundle()
+    log_click("start %s notification-bundle %s: %s"
+              % (APP_NAME, "ok" if _ok else "FAILED", _detail))
+    SwitchDeck().run()

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.shashank.switchdeck</string>
+  <!-- Do not hand-edit and copy this file. scripts/install.sh renders it
+       with your real username and clone path, then boots it. This tracked
+       copy is the template: YOU and the repo path are placeholders, and a
+       plist loaded with them still in place fails to spawn.
+       Label renamed from com.shashank.switchbar on 2026-08-24; the old
+       label must be booted out before the new one is bootstrapped. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/YOU/.switchdeck-venv/bin/python3</string>
+    <string>/Users/YOU/Projects-with-Claude/switchdeck/switchdeck.py</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/YOU/Projects-with-Claude/switchdeck</string>
+  <key>RunAtLoad</key><true/>
+  <!-- KeepAlive true so a crash restarts the bar. It does not protect
+       against a missing interpreter: launchd gives up on repeated spawn
+       failures and reports exit code 78 (EX_CONFIG), which is silent
+       because a menu bar app has no window to miss. See the notes in
+       docs/STATE.md before changing the venv or the Python behind it. -->
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/Users/YOU/switchdeck.log</string>
+  <key>StandardErrorPath</key><string>/Users/YOU/switchdeck.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/Users/YOU/.local/bin</string>
+  </dict>
+</dict>
+</plist>
