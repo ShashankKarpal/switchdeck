@@ -12,7 +12,7 @@
 
 <p align="center">
   <img alt="Platform" src="https://img.shields.io/badge/platform-macOS-2D647F?style=flat-square">
-  <img alt="Status" src="https://img.shields.io/badge/status-v1.5-2D647F?style=flat-square">
+  <img alt="Status" src="https://img.shields.io/badge/status-v1.9.1-2D647F?style=flat-square">
   <img alt="Local only" src="https://img.shields.io/badge/local-only-2D647F?style=flat-square">
   <img alt="Stack" src="https://img.shields.io/badge/built%20with-Python-1A1917?style=flat-square">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-1A1917?style=flat-square"></a>
@@ -23,7 +23,7 @@
 - Switches between Claude Code accounts from the menu bar in one click.
 - Shows 5 hour and 7 day usage for every account without opening a terminal.
 - Logs every switch locally, so usage is measured rather than remembered.
-- Makes zero network calls in a stock install: everything is read from local files and the local cswap engine.
+- Makes no network calls of its own: everything is read from local files and the local cswap engine. The engine it wraps fetches usage from Anthropic with your stored login on each refresh; that is the one network path in a stock install.
 - Optional, off by default: a Codex token/cost row (read-only, via ccusage) that also launches Codex in a terminal. Enabling it opts into network calls to npm; see Configuration.
 
 ## Features
@@ -108,8 +108,10 @@ Click the menu bar item. Each account row shows usage and switches on click. Wit
 
 ```
 switchdeck.py                   the rumps menu bar app
-scripts/install.sh              install or repair, idempotent
+scripts/install.sh              install or repair, idempotent (bundle, LaunchAgent, venv)
+scripts/selftest_notify.py      notification delivery self-test
 local_settings.example.py       label and path placeholders
+docs/                           audits and state notes
 com.shashank.switchdeck.plist   LaunchAgent template for run at login
 design/                         brand assets, tokens, BRAND.md
 ROADMAP.md                      behavior gates per version

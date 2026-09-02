@@ -17,7 +17,7 @@
 
 ## 2026-08-17: engine revalidated on claude-swap 0.25.0, contract pinned
 - Upgraded 0.19.0 to 0.25.0 (uv tool upgrade) after a `cswap export` safety backup (gitignored). Revalidation PASSED: round-trip switch verified both directions against the org identity in ~/.claude.json; same-email slots held distinct org identities; MCP config in ~/.claude.json survived the cycle byte-identical.
-- JSON contract: every 0.25.x payload carries schemaVersion (integer 1), pinned in switchbar.py as VALIDATED_SCHEMA_VERSION beside VALIDATED_ENGINE; drift renders one non-clickable warning row and changes nothing else. Shape change vs 0.19.0: when the live usage fetch fails, `usage` is null and the last success moves to `lastGoodUsage` with `usageStatus` and `lastGoodAgeSeconds`. Ruling (Shanky, 2026-08-17): fall back to lastGoodUsage with a staleness marker and surface a non-ok usageStatus inline, rather than degrading to "usage n/a".
+- JSON contract: every 0.25.x payload carries schemaVersion (integer 1), pinned in switchdeck.py (switchbar.py at the time) as VALIDATED_SCHEMA_VERSION beside VALIDATED_ENGINE; drift renders one non-clickable warning row and changes nothing else. Shape change vs 0.19.0: when the live usage fetch fails, `usage` is null and the last success moves to `lastGoodUsage` with `usageStatus` and `lastGoodAgeSeconds`. Ruling (Shanky, 2026-08-17): fall back to lastGoodUsage with a staleness marker and surface a non-ok usageStatus inline, rather than degrading to "usage n/a".
 - Pre-existing finding, not caused by the upgrade: slot 1 reported usageStatus relogin_required with lastGoodUsage about 14 days stale, so its usage fetching has been failing since about 2026-08-03 while credential switching kept working throughout. Re-login is an owner action outside the app.
 - Upstream boundary restated: 0.25.x ships its own menu bar app and auto-switch. Per docs/redteam-audit-2026-08-17.md, this app narrates the engine and never reimplements thresholds or switching logic.
 
@@ -45,3 +45,9 @@
 3. At the end of each session: delete unused code, merge duplicate helpers, remove commented-out blocks. Use deterministic tools (linters, dead-code finders) and review the diff before deleting.
 4. Keep .gitignore covering .env, .env.*, and secrets.* (with !*.example exemptions). Never weaken it.
 5. The gitleaks CI workflow (.github/workflows/gitleaks.yml) stays. Never remove or bypass it.
+
+## 2026-09-02: fleet audit pass (kk1), hygiene and hardening
+- The 2026-08-17 `cswap export` safety backup was an unencrypted file holding access and refresh tokens for both accounts, sitting gitignored inside this public repo's working tree. Moved out of the tree to a 0700 directory under ~/.local/state (operator action, not a repo change). RULE: engine exports never live inside any repo checkout, gitignored or not; gitignore protects `git add`, nothing else.
+- engine_version() now resolves once per process instead of spawning an interpreter every refresh tick. Click log is created 0600. fmt_usage renders windows in a fixed order (5h, 7d, spend) so the row never reorders and a spend_limit window has a label.
+- README: status badge to v1.9.1; the "zero network calls" claim reworded, since the wrapped engine fetches usage from Anthropic on every refresh. ROADMAP v2 heading corrected from "completed" to killed per the 2026-08-17 audit.
+- Deferred to the fleet roadmap (docs in _inbox/app-fleet-roadmap): engine calls off the UI thread (worker thread plus apply timer, the pattern the fleet's menu bar host already uses), the account-tagged statusline snapshot as a fresher usage source for the active slot, Desktop-app slot shims (claude-graft pattern), a pending-handoff badge fed by an optional command in gitignored local_settings.

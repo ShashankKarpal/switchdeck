@@ -374,11 +374,20 @@ def driving_window(poll, slot_no):
     return name, cands[name]
 
 
+_ENGINE_VERSION = None
+
+
 def engine_version():
-    rc, out, _err = _run([CSWAP_BIN, "--version"], timeout=10)
-    if rc != 0 or not out.strip():
-        return None
-    return out.strip().split()[-1]
+    """Engine version, resolved once per process. The engine cannot change
+    version without a reinstall, and spawning an interpreter on every
+    refresh tick was the second-largest cost of the refresh (audit
+    2026-09-02). A failed probe is retried on the next call."""
+    global _ENGINE_VERSION
+    if _ENGINE_VERSION is None:
+        rc, out, _err = _run([CSWAP_BIN, "--version"], timeout=10)
+        if rc == 0 and out.strip():
+            _ENGINE_VERSION = out.strip().split()[-1]
+    return _ENGINE_VERSION
 
 
 def engine_warning(data):
@@ -440,21 +449,38 @@ def last_project():
 
 
 def log_click(text):
+    """Append one line to the click log, created 0600. The log carries org
+    names and project basenames, an activity trail no other local user or
+    process needs to read (audit 2026-09-02)."""
     try:
-        with open(CLICK_LOG, "a") as f:
+        fd = os.open(CLICK_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        with os.fdopen(fd, "a") as f:
             f.write("%s %s\n" % (_dt.datetime.now().isoformat(timespec="seconds"), text))
     except OSError:
         pass
 
 
+USAGE_WINDOWS = (("fiveHour", "5h"), ("sevenDay", "7d"), ("spend", "spend"))
+
+
 def fmt_usage(u):
+    """Known windows first in a fixed order (5h, 7d, spend), then anything
+    the engine adds later under its raw key, so the row never reorders
+    between ticks and a spend_limit window gets a readable label."""
     if not isinstance(u, dict):
         return "usage n/a"
-    label_map = {"fiveHour": "5h", "sevenDay": "7d"}
     parts = []
-    for key, win in u.items():
+    seen = set()
+    for key, label in USAGE_WINDOWS:
+        win = u.get(key)
+        seen.add(key)
         if isinstance(win, dict) and win.get("pct") is not None:
-            parts.append("%s %d%%" % (label_map.get(key, key), round(win["pct"])))
+            parts.append("%s %d%%" % (label, round(win["pct"])))
+    for key, win in u.items():
+        if key in seen:
+            continue
+        if isinstance(win, dict) and win.get("pct") is not None:
+            parts.append("%s %d%%" % (key, round(win["pct"])))
     return " - ".join(parts) if parts else "usage n/a"
 
 

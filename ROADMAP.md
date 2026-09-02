@@ -16,7 +16,7 @@ Each version ships only after the previous version's behavior signal is proven. 
 - Behavior to prove: switching from the menu bar mid-session during real work.
 - Signal: 3+ menu bar switches per week for 2 consecutive weeks, excluding the first 2 days of test clicks.
 
-## v2: unified view, completed
+## v2: unified view, killed 2026-08-17 (see docs/redteam-audit-2026-08-17.md; R1/R2 replaced by the audit plan)
 - Uebersicht desktop widget fed by the same JSON sources.
 - Codex quota windows (5h/weekly bars, not just token cost); requires reading the local Codex auth session, evaluate ccusage/CodexBar-style approaches first.
 - Behavior to prove: checking headroom before token-heavy work, front-loading before the evening compression peak.
