@@ -131,5 +131,128 @@ class ClickLogMode(unittest.TestCase):
             os.rmdir(d)
 
 
+class NarrationOutcome(unittest.TestCase):
+    POLL = {"event": "poll", "threshold": 90,
+            "windowsPct": {"1": {"fiveHour": 91, "sevenDay": 40}}}
+
+    def test_new_would_switch_notifies_and_sets_key(self):
+        events = [self.POLL, {"event": "switch", "from": {"number": 1}, "to": {"number": 2}}]
+        out = sd.narration_outcome(0, events, None)
+        self.assertEqual(out.key, (1, 2, "fiveHour"))
+        self.assertIn("would-switch 1->2 fiveHour at 91%", out.log_line)
+        self.assertNotIn("deduped", out.log_line)
+        self.assertIn("Would switch slot 1 to slot 2", out.notify_message)
+        self.assertIsNone(out.menu_row)
+
+    def test_same_condition_is_deduped_but_still_logged(self):
+        events = [self.POLL, {"event": "switch", "from": {"number": 1}, "to": {"number": 2}}]
+        out = sd.narration_outcome(0, events, (1, 2, "fiveHour"))
+        self.assertEqual(out.key, (1, 2, "fiveHour"))
+        self.assertIn("(deduped)", out.log_line)
+        self.assertIsNone(out.notify_message)
+
+    def test_no_switch_clears_key_silently(self):
+        out = sd.narration_outcome(2, [self.POLL, {"event": "no-switch", "reason": "below"}],
+                                   (1, 2, "fiveHour"))
+        self.assertIsNone(out.key)
+        self.assertIsNone(out.log_line)
+        self.assertIsNone(out.notify_message)
+        self.assertIsNone(out.menu_row)
+
+    def test_error_logs_and_returns_menu_row_without_notification(self):
+        out = sd.narration_outcome(1, [{"event": "error", "error": "engine down"}], None)
+        self.assertIn("auto-dryrun error rc=1 engine down", out.log_line)
+        self.assertIsNone(out.notify_message)
+        self.assertTrue(out.menu_row.startswith("auto dry-run error: engine down"))
+        self.assertIsNone(out.key)
+
+    def test_blocked_by_exit_code(self):
+        out = sd.narration_outcome(3, [], None)
+        self.assertIn("blocked rc=3", out.log_line)
+        self.assertTrue(out.menu_row.startswith("auto dry-run blocked"))
+
+
+class RefreshPumpBehaviour(unittest.TestCase):
+    def test_result_is_parked_once_and_taken_once(self):
+        pump = sd.RefreshPump()
+        self.assertTrue(pump.start(lambda: {"n": 1}))
+        pump.join(5)
+        self.assertEqual(pump.take(), {"n": 1})
+        self.assertIsNone(pump.take())
+        self.assertFalse(pump.busy)
+
+    def test_overlapping_start_is_refused_while_in_flight(self):
+        import threading
+        gate = threading.Event()
+
+        def slow():
+            gate.wait(5)
+            return "done"
+
+        pump = sd.RefreshPump()
+        self.assertTrue(pump.start(slow))
+        self.assertTrue(pump.busy)
+        self.assertFalse(pump.start(slow))
+        gate.set()
+        pump.join(5)
+        self.assertEqual(pump.take(), "done")
+        self.assertFalse(pump.busy)
+
+    def test_exception_clears_in_flight_and_parks_error(self):
+        def boom():
+            raise RuntimeError("engine exploded")
+
+        pump = sd.RefreshPump()
+        self.assertTrue(pump.start(boom))
+        pump.join(5)
+        self.assertFalse(pump.busy)
+        result = pump.take()
+        self.assertIsInstance(result, sd.CollectError)
+        self.assertIn("engine exploded", str(result))
+        self.assertTrue(pump.start(lambda: 1))
+        pump.join(5)
+
+
+class CollectSnapshot(unittest.TestCase):
+    def test_snapshot_uses_engine_functions_and_carries_all_fields(self):
+        saved = (sd.cswap_list, sd.cswap_auto_dryrun, sd.active_org,
+                 sd.live_claude_sessions, sd._ENGINE_VERSION, sd.AUTO_NARRATE)
+        try:
+            sd._ENGINE_VERSION = sd.VALIDATED_ENGINE
+            sd.AUTO_NARRATE = True
+            sd.cswap_list = lambda: {"schemaVersion": 1, "activeAccountNumber": 2,
+                                     "accounts": [{"number": 2, "active": True,
+                                                   "usage": {"fiveHour": {"pct": 9}}}]}
+            sd.cswap_auto_dryrun = lambda: (2, [{"event": "no-switch"}])
+            sd.active_org = lambda: ("Org", "abcd1234")
+            sd.live_claude_sessions = lambda: [{"pid": 1}]
+            snap = sd.collect_snapshot()
+            self.assertEqual(snap["data"]["activeAccountNumber"], 2)
+            self.assertIsNone(snap["warn"])
+            self.assertEqual(snap["auto"], (2, [{"event": "no-switch"}]))
+            self.assertEqual(snap["org"], "Org")
+            self.assertEqual(snap["live"], 1)
+        finally:
+            (sd.cswap_list, sd.cswap_auto_dryrun, sd.active_org,
+             sd.live_claude_sessions, sd._ENGINE_VERSION, sd.AUTO_NARRATE) = saved
+
+    def test_narration_off_skips_the_dry_run(self):
+        saved = (sd.cswap_list, sd.cswap_auto_dryrun, sd.active_org,
+                 sd.live_claude_sessions, sd.AUTO_NARRATE)
+        calls = []
+        try:
+            sd.AUTO_NARRATE = False
+            sd.cswap_list = lambda: None
+            sd.cswap_auto_dryrun = lambda: calls.append("dryrun")
+            sd.active_org = lambda: ("?", "?")
+            sd.live_claude_sessions = lambda: []
+            snap = sd.collect_snapshot()
+            self.assertIsNone(snap["auto"])
+            self.assertEqual(calls, [])
+        finally:
+            (sd.cswap_list, sd.cswap_auto_dryrun, sd.active_org,
+             sd.live_claude_sessions, sd.AUTO_NARRATE) = saved
+
+
 if __name__ == "__main__":
     unittest.main()

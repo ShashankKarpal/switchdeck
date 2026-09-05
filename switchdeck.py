@@ -538,6 +538,125 @@ def usage_line(acc):
     return "%s (%s)" % (fmt_usage(lg), stale)
 
 
+class CollectError(Exception):
+    """A worker run that raised; parked as the result so the UI can show it
+    and the click log can record it instead of a swallowed thread death."""
+
+
+class RefreshPump:
+    """Runs one collector at a time on a background thread and parks its
+    result for the main thread to take. The menu is rendered only from a
+    taken result, never from inside the worker: AppKit menus are
+    main-thread objects, and every engine call (cswap list, the dry-run
+    tick, cswap --version) is a subprocess that can block for its full
+    timeout when the network is down (audit 2026-09-02: up to 70 s per
+    refresh on the UI thread). start() refuses to overlap a run in flight;
+    take() hands the parked result over exactly once."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._pending = None
+        self._has_pending = False
+        self._thread = None
+
+    @property
+    def busy(self):
+        t = self._thread
+        return bool(t and t.is_alive())
+
+    def start(self, collect):
+        with self._lock:
+            if self.busy:
+                return False
+            self._thread = threading.Thread(target=self._run, args=(collect,),
+                                            daemon=True)
+            self._thread.start()
+            return True
+
+    def _run(self, collect):
+        try:
+            result = collect()
+        except Exception as e:  # noqa: BLE001 - parked, never lost
+            result = CollectError("%s: %s" % (type(e).__name__, e))
+        with self._lock:
+            self._pending = result
+            self._has_pending = True
+
+    def take(self):
+        with self._lock:
+            if not self._has_pending:
+                return None
+            result, self._pending, self._has_pending = self._pending, None, False
+            return result
+
+    def join(self, timeout=None):
+        t = self._thread
+        if t:
+            t.join(timeout)
+
+
+def collect_snapshot():
+    """Everything one refresh needs, gathered off the UI thread. Pure data
+    out: no menu, no notification, no click log. The engine calls happen
+    here; the dry-run outcome is returned raw and narrated on the main
+    thread so the dedupe state and the notification stay there."""
+    data = cswap_list()
+    warn = engine_warning(data)
+    auto = cswap_auto_dryrun() if AUTO_NARRATE else None
+    org, _u8 = active_org()
+    live = len(live_claude_sessions())
+    return {"data": data, "warn": warn, "auto": auto, "org": org, "live": live}
+
+
+class NarrationOutcome(object):
+    """What one dry-run tick means for the UI: the click-log line (or None),
+    the notification body (or None), the next dedupe key, and a menu row
+    for error or blocked outcomes (or None)."""
+    __slots__ = ("log_line", "notify_message", "key", "menu_row")
+
+    def __init__(self, log_line=None, notify_message=None, key=None, menu_row=None):
+        self.log_line = log_line
+        self.notify_message = notify_message
+        self.key = key
+        self.menu_row = menu_row
+
+
+def narration_outcome(rc, events, prev_key):
+    """Interpret one engine auto dry-run tick. A would-switch notifies once
+    per distinct condition (from, to, driving window) and always logs; poll
+    and no-switch are silent and clear the key so a returning condition
+    notifies again; error and blocked outcomes log and yield one
+    non-clickable menu row string, never a notification."""
+    events = events or []
+    poll = next((e for e in events if e.get("event") == "poll"), None)
+    final = next((e for e in reversed(events) if e.get("event") != "poll"), None)
+    kind = (final or {}).get("event")
+    if kind == "switch":
+        from_no = (final.get("from") or {}).get("number")
+        to_no = (final.get("to") or {}).get("number")
+        win, pct = driving_window(poll, from_no)
+        detail = ("%s at %d%%" % (win, round(pct)) if win else "threshold reached")
+        key = (from_no, to_no, win)
+        deduped = key == prev_key
+        log_line = ("auto-dryrun would-switch %s->%s %s%s"
+                    % (from_no, to_no, detail, " (deduped)" if deduped else ""))
+        message = None
+        if not deduped:
+            message = ("Would switch slot %s to slot %s, %s. No switch performed."
+                       % (from_no, to_no, detail))
+        return NarrationOutcome(log_line=log_line, notify_message=message, key=key)
+    if kind == "no-switch" or rc == 2:
+        return NarrationOutcome()
+    label = "blocked" if rc == 3 or kind == "blocked" else "error"
+    reason = ""
+    if isinstance(final, dict):
+        reason = str(final.get("reason") or final.get("detail")
+                     or final.get("error") or "").strip()
+    log_line = "auto-dryrun %s rc=%s %s" % (label, rc, reason or kind or "no event")
+    row = ("auto dry-run %s: %s" % (label, reason or "see click log"))[:80]
+    return NarrationOutcome(log_line=log_line, menu_row=row)
+
+
 def summarize_codex(d):
     t = d.get("totals") or d.get("total") or {}
     cost = t.get("totalCost", t.get("costUSD", t.get("cost")))
@@ -565,6 +684,13 @@ class SwitchDeck(rumps.App):
         # persistence. Cleared on no-switch so a returning condition
         # (window reset, then filled again) notifies again.
         self._auto_key = None
+        # Engine calls run on a worker (RefreshPump); the apply timer moves
+        # each finished snapshot into the menu on the main thread. Until the
+        # first snapshot lands the menu shows a loading row, not nothing.
+        self._pump = RefreshPump()
+        self._render_loading()
+        self.apply_timer = rumps.Timer(self._apply, 1)
+        self.apply_timer.start()
         self.refresh_timer = rumps.Timer(self.refresh, REFRESH_SECONDS)
         self.refresh_timer.start()
         if CODEX_USAGE_CMD:
@@ -584,7 +710,44 @@ class SwitchDeck(rumps.App):
         self.refresh()
 
     def refresh(self, _sender=None):
-        data = cswap_list()
+        """Schedule one snapshot on the worker. Returns immediately; the
+        menu updates when _apply takes the result. A run already in flight
+        is left alone (its result is about to land anyway)."""
+        self._pump.start(collect_snapshot)
+
+    def _apply(self, _sender=None):
+        """Main thread, once a second: render the parked snapshot if there
+        is one. Narration side effects (click log, notification, dedupe
+        key) happen here, never on the worker."""
+        snap = self._pump.take()
+        if snap is None:
+            return
+        if isinstance(snap, CollectError):
+            log_click("refresh worker failed: %s" % snap)
+            self._render(None, None, None, "?", 0,
+                         extra_row="refresh failed: %s" % str(snap)[:60])
+            return
+        auto_row = None
+        if snap["auto"] is not None:
+            rc, events = snap["auto"]
+            out = narration_outcome(rc, events, self._auto_key)
+            self._auto_key = out.key
+            if out.log_line:
+                log_click(out.log_line)
+            if out.notify_message:
+                _notify(APP_NAME, "Auto (dry-run)", out.notify_message)
+            auto_row = out.menu_row
+        self._render(snap["data"], snap["warn"], auto_row, snap["org"], snap["live"])
+
+    def _render_loading(self):
+        self.title = u"⇄ ?"
+        self.menu.clear()
+        self.menu.add(rumps.MenuItem("loading...", callback=None))
+        self.menu.add(rumps.separator)
+        self.menu.add(rumps.MenuItem("Refresh", callback=self.refresh_all))
+        self.menu.add(rumps.MenuItem("Quit", callback=self._quit))
+
+    def _render(self, data, warn, auto_row, org, live, extra_row=None):
         items = []
         active_no = None
         if data and isinstance(data.get("accounts"), list):
@@ -599,71 +762,28 @@ class SwitchDeck(rumps.App):
         else:
             items.append(rumps.MenuItem("cswap unavailable - click to retry",
                                         callback=self.refresh))
-        warn = engine_warning(data)
         if warn:
             items.append(rumps.MenuItem(warn, callback=None))
-        if AUTO_NARRATE:
-            auto_row = self._narrate_auto()
-            if auto_row:
-                items.append(rumps.MenuItem(auto_row, callback=None))
-        org, _u8 = active_org()
+        if auto_row:
+            items.append(rumps.MenuItem(auto_row, callback=None))
+        if extra_row:
+            items.append(rumps.MenuItem(extra_row, callback=None))
         self.title = u"⇄ %s" % _lbl(SHORT_LABELS, active_no, "?")
         items.append(rumps.separator)
         if CODEX_USAGE_CMD:
             items.append(rumps.MenuItem(self.codex_line + "  -  click to open",
                                         callback=self._open_codex))
         items.append(rumps.MenuItem("Active org: %s" % org, callback=None))
-        live = live_claude_sessions()
         if live:
             items.append(rumps.MenuItem(
                 "%d live CLI session(s): switch applies in ~30s, not mid-reply"
-                % len(live), callback=None))
+                % live, callback=None))
         items.append(rumps.separator)
         items.append(rumps.MenuItem("Refresh", callback=self.refresh_all))
         items.append(rumps.MenuItem("Quit", callback=self._quit))
         self.menu.clear()
         for it in items:
             self.menu.add(it)
-
-    def _narrate_auto(self):
-        """Narrate one engine auto dry-run tick. A would-switch notifies
-        once per distinct condition and always logs; poll and no-switch are
-        silent; error and blocked outcomes log and return one non-clickable
-        menu row string (never a notification). Returns None otherwise."""
-        rc, events = cswap_auto_dryrun()
-        poll = next((e for e in events if e.get("event") == "poll"), None)
-        final = next((e for e in reversed(events)
-                      if e.get("event") != "poll"), None)
-        kind = (final or {}).get("event")
-        if kind == "switch":
-            from_no = (final.get("from") or {}).get("number")
-            to_no = (final.get("to") or {}).get("number")
-            win, pct = driving_window(poll, from_no)
-            detail = ("%s at %d%%" % (win, round(pct)) if win
-                      else "threshold reached")
-            key = (from_no, to_no, win)
-            deduped = key == self._auto_key
-            log_click("auto-dryrun would-switch %s->%s %s%s"
-                      % (from_no, to_no, detail,
-                         " (deduped)" if deduped else ""))
-            if not deduped:
-                self._auto_key = key
-                _notify(APP_NAME, "Auto (dry-run)",
-                        "Would switch slot %s to slot %s, %s. "
-                        "No switch performed." % (from_no, to_no, detail))
-            return None
-        if kind == "no-switch" or rc == 2:
-            self._auto_key = None
-            return None
-        label = "blocked" if rc == 3 or kind == "blocked" else "error"
-        reason = ""
-        if isinstance(final, dict):
-            reason = str(final.get("reason") or final.get("detail")
-                         or final.get("error") or "").strip()
-        log_click("auto-dryrun %s rc=%s %s"
-                  % (label, rc, reason or kind or "no event"))
-        return ("auto dry-run %s: %s"
-                % (label, reason or "see click log"))[:80]
 
     def _make_switch(self, n, label):
         def _cb(_sender):
