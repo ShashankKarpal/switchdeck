@@ -133,6 +133,72 @@ class UsageLine(unittest.TestCase):
                          "usage n/a")
 
 
+class SessionActivity(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        self.saved = sd.CLAUDE_PROJECTS_DIR
+        sd.CLAUDE_PROJECTS_DIR = self.root
+
+    def tearDown(self):
+        sd.CLAUDE_PROJECTS_DIR = self.saved
+        import shutil
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _transcript(self, cwd, sid, age_seconds):
+        d = os.path.join(self.root, sd.encode_project_dir(cwd))
+        os.makedirs(d, exist_ok=True)
+        p = os.path.join(d, sid + ".jsonl")
+        with open(p, "w") as f:
+            f.write("{}\n")
+        import time
+        t = time.time() - age_seconds
+        os.utime(p, (t, t))
+        return p
+
+    def test_project_dir_encoding_matches_claude_code(self):
+        self.assertEqual(sd.encode_project_dir("/Users/me/.local"), "-Users-me--local")
+        self.assertEqual(sd.encode_project_dir("/Users/me/Desktop/Codex"),
+                         "-Users-me-Desktop-Codex")
+
+    def test_busy_when_transcript_written_recently(self):
+        self._transcript("/Users/me/proj-a", "aaa", 2)
+        self._transcript("/Users/me/proj-b", "bbb", 120)
+        sessions = [{"pid": 1, "cwd": "/Users/me/proj-a", "sessionId": "aaa"},
+                    {"pid": 2, "cwd": "/Users/me/proj-b", "sessionId": "bbb"},
+                    {"pid": 3, "cwd": "/Users/me/proj-c", "sessionId": "ccc"}]  # no transcript
+        act = sd.session_activity(sessions)
+        self.assertEqual(act, {"live": 3, "busy": 1})
+
+    def test_transcripts_are_never_opened(self):
+        import builtins
+        self._transcript("/Users/me/proj-a", "aaa", 1)
+        real_open = builtins.open
+
+        def guard(path, *a, **kw):
+            if str(path).endswith(".jsonl"):
+                raise AssertionError("transcript opened: %s" % path)
+            return real_open(path, *a, **kw)
+
+        builtins.open = guard
+        try:
+            act = sd.session_activity([{"pid": 1, "cwd": "/Users/me/proj-a",
+                                        "sessionId": "aaa"}])
+        finally:
+            builtins.open = real_open
+        self.assertEqual(act["busy"], 1)
+
+    def test_malformed_session_entries_degrade_to_count_only(self):
+        act = sd.session_activity([{"pid": 1}, "junk", None])
+        self.assertEqual(act, {"live": 3, "busy": 0})
+
+    def test_live_sessions_line(self):
+        self.assertIsNone(sd.live_sessions_line({"live": 0, "busy": 0}))
+        self.assertEqual(sd.live_sessions_line({"live": 2, "busy": 0}),
+                         "2 live CLI session(s), idle: switch applies in ~30s, not mid-reply")
+        self.assertEqual(sd.live_sessions_line({"live": 2, "busy": 1}),
+                         "2 live CLI session(s), 1 busy: switch applies in ~30s, not mid-reply")
+
+
 class DrivingWindow(unittest.TestCase):
     def test_picks_window_over_threshold(self):
         poll = {"threshold": 90, "windowsPct": {"1": {"fiveHour": 91, "sevenDay": 95}}}
@@ -275,6 +341,7 @@ class CollectSnapshot(unittest.TestCase):
             self.assertEqual(snap["auto"], (2, [{"event": "no-switch"}]))
             self.assertEqual(snap["org"], "Org")
             self.assertEqual(snap["live"], 1)
+            self.assertEqual(snap["busy"], 0)  # pid 1 has no transcript
         finally:
             (sd.cswap_list, sd.cswap_auto_dryrun, sd.active_org,
              sd.live_claude_sessions, sd._ENGINE_VERSION, sd.AUTO_NARRATE) = saved

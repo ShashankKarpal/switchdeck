@@ -35,6 +35,7 @@
 - **Identity-keyed slots.** Two accounts on the same email hold separate slots, verified.
 - **Round-trip verified.** Config updates instantly; a running session picks up the change in about 30 seconds or on restart.
 - **MCP connectors survive switching.** Connected claude.ai connectors do not require re-authentication.
+- **Live session awareness.** The menu counts running Claude Code CLI sessions and says whether any is busy (its transcript file changed in the last 10 seconds, checked by file time only, never by reading it), because a switch reaches a running session only after its ~30 second credential cache expires and never mid-reply.
 
 ### Usage
 

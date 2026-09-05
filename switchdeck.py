@@ -59,6 +59,10 @@ SHORT_LABELS = {1: "1", 2: "2"}
 CLICK_LOG = os.path.join(HOME, "switchdeck-clicks.log")
 CLAUDE_JSON = os.path.join(HOME, ".claude.json")
 CLAUDE_SESSIONS_DIR = os.path.join(HOME, ".claude", "sessions")
+CLAUDE_PROJECTS_DIR = os.path.join(HOME, ".claude", "projects")
+# A live CLI session whose transcript file changed within this many seconds
+# counts as busy (mid-reply or mid-tool-call); the file is never opened.
+SESSION_BUSY_SECONDS = 10
 REFRESH_SECONDS = 300
 CODEX_REFRESH_SECONDS = 1800
 
@@ -321,6 +325,58 @@ def live_claude_sessions():
         except (ValueError, TypeError, OSError):
             continue
     return sessions
+
+
+def encode_project_dir(cwd):
+    """Claude Code's folder name for a project under ~/.claude/projects:
+    every character that is not a letter or digit becomes '-', so
+    /Users/me/.local -> -Users-me--local. Observed on this Mac
+    (2026-09-05), not documented upstream; a mismatch only means a session
+    reads as idle, never an error."""
+    import re
+    return re.sub(r"[^A-Za-z0-9]", "-", str(cwd))
+
+
+def session_transcript_path(sess):
+    """~/.claude/projects/<encoded cwd>/<sessionId>.jsonl for one session
+    record, or None when the record lacks either field."""
+    if not isinstance(sess, dict):
+        return None
+    cwd, sid = sess.get("cwd"), sess.get("sessionId")
+    if not cwd or not sid:
+        return None
+    return os.path.join(CLAUDE_PROJECTS_DIR, encode_project_dir(cwd), "%s.jsonl" % sid)
+
+
+def session_activity(sessions, now=None):
+    """{'live': n, 'busy': m}: busy means the session's transcript file was
+    modified within SESSION_BUSY_SECONDS. Metadata only: os.stat on the
+    path, the transcript is never opened or read (the switchboard pattern,
+    audit 2026-09-02 E3). Anything malformed counts as live but idle."""
+    import time
+    now = time.time() if now is None else now
+    busy = 0
+    for sess in sessions or ():
+        path = session_transcript_path(sess)
+        if not path:
+            continue
+        try:
+            if now - os.stat(path).st_mtime < SESSION_BUSY_SECONDS:
+                busy += 1
+        except OSError:
+            continue
+    return {"live": len(sessions or ()), "busy": busy}
+
+
+def live_sessions_line(act):
+    """Menu row for live CLI sessions, or None when there are none."""
+    live = act.get("live", 0)
+    if not live:
+        return None
+    busy = act.get("busy", 0)
+    state = "%d busy" % busy if busy else "idle"
+    return ("%d live CLI session(s), %s: switch applies in ~30s, not mid-reply"
+            % (live, state))
 
 
 def cswap_list():
@@ -659,8 +715,9 @@ def collect_snapshot():
     warn = engine_warning(data)
     auto = cswap_auto_dryrun() if AUTO_NARRATE else None
     org, _u8 = active_org()
-    live = len(live_claude_sessions())
-    return {"data": data, "warn": warn, "auto": auto, "org": org, "live": live}
+    act = session_activity(live_claude_sessions())
+    return {"data": data, "warn": warn, "auto": auto, "org": org,
+            "live": act["live"], "busy": act["busy"]}
 
 
 class NarrationOutcome(object):
@@ -779,7 +836,7 @@ class SwitchDeck(rumps.App):
             return
         if isinstance(snap, CollectError):
             log_click("refresh worker failed: %s" % snap)
-            self._render(None, None, None, "?", 0,
+            self._render(None, None, None, "?", {"live": 0, "busy": 0},
                          extra_row="refresh failed: %s" % str(snap)[:60])
             return
         auto_row = None
@@ -792,7 +849,8 @@ class SwitchDeck(rumps.App):
             if out.notify_message:
                 _notify(APP_NAME, "Auto (dry-run)", out.notify_message)
             auto_row = out.menu_row
-        self._render(snap["data"], snap["warn"], auto_row, snap["org"], snap["live"])
+        self._render(snap["data"], snap["warn"], auto_row, snap["org"],
+                     {"live": snap.get("live", 0), "busy": snap.get("busy", 0)})
 
     def _render_loading(self):
         self.title = u"⇄ ?"
@@ -802,7 +860,7 @@ class SwitchDeck(rumps.App):
         self.menu.add(rumps.MenuItem("Refresh", callback=self.refresh_all))
         self.menu.add(rumps.MenuItem("Quit", callback=self._quit))
 
-    def _render(self, data, warn, auto_row, org, live, extra_row=None):
+    def _render(self, data, warn, auto_row, org, act, extra_row=None):
         items = []
         active_no = None
         if data and isinstance(data.get("accounts"), list):
@@ -829,10 +887,9 @@ class SwitchDeck(rumps.App):
             items.append(rumps.MenuItem(self.codex_line + "  -  click to open",
                                         callback=self._open_codex))
         items.append(rumps.MenuItem("Active org: %s" % org, callback=None))
-        if live:
-            items.append(rumps.MenuItem(
-                "%d live CLI session(s): switch applies in ~30s, not mid-reply"
-                % live, callback=None))
+        live_row = live_sessions_line(act)
+        if live_row:
+            items.append(rumps.MenuItem(live_row, callback=None))
         items.append(rumps.separator)
         items.append(rumps.MenuItem("Refresh", callback=self.refresh_all))
         items.append(rumps.MenuItem("Quit", callback=self._quit))
@@ -849,18 +906,19 @@ class SwitchDeck(rumps.App):
             except ValueError:
                 pass
             if ok:
-                live = live_claude_sessions()
+                act = session_activity(live_claude_sessions())
                 proj = last_project()
-                log_click("menubar switch-to %s (%s) live_cli=%d project=%s"
-                          % (n, label, len(live), proj or "-"))
+                log_click("menubar switch-to %s (%s) live_cli=%d busy=%d project=%s"
+                          % (n, label, act["live"], act["busy"], proj or "-"))
                 org, u8 = active_org()
                 # Resume card: what you need to carry on, in one banner.
                 # Org is the proof the switch landed; the live-session line
                 # is the one thing that changes what you do next, so it
                 # stays first when it applies.
-                if live:
-                    body = ("%d live CLI session(s): applies in ~30s, "
-                            "not mid-reply." % len(live))
+                if act["live"]:
+                    state = ("%d busy" % act["busy"]) if act["busy"] else "idle"
+                    body = ("%d live CLI session(s), %s: applies in ~30s, "
+                            "not mid-reply." % (act["live"], state))
                 else:
                     body = "Active org: %s (%s...)" % (org, u8)
                 if proj:

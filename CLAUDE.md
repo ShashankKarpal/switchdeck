@@ -76,3 +76,10 @@
 - The last-good (stale) fallback keeps the plain form without reset or pace: those are display-grade numbers from a failed fetch and the staleness marker is the honest suffix there.
 - Tests: 30 (4 new: scoped-by-name ordering, rich form, pace chip states, live vs last-good forms). Live check against `cswap list --json`: both rows matched the engine's clock and verdict fields on 2026-09-05.
 - Fleet note: the v1 roadmap's "per-slot burn pace chip" was specified against the statusline snapshot; it ships here from the engine instead, because the snapshot only moves during CLI sessions while the engine is about 40 s fresh.
+
+## 2026-09-05 (fourth): busy or idle on the live-sessions line
+- The live-sessions row now says "2 live CLI session(s), 1 busy: ..." or ", idle: ...". Busy means the session's transcript file (~/.claude/projects/<encoded cwd>/<sessionId>.jsonl) was modified within SESSION_BUSY_SECONDS (10). The check is os.stat on the path; the transcript is never opened, and a test replaces builtins.open with a guard that fails on any .jsonl open to keep it that way. The resume card and the click log carry the same busy count (`live_cli=N busy=M`).
+- Session record schema observed on this Mac (Claude Code 2.1.x, 2026-09-05): ~/.claude/sessions/<pid>.json with pid, sessionId, cwd, startedAt, kind, name and messaging fields; removed on exit. The project folder name is the cwd with every non-alphanumeric character replaced by '-' (so a dot becomes '-' too: /Users/me/.local -> -Users-me--local). Both are upstream conventions, not a contract; a mismatch degrades to "idle", never to an error.
+- PROOF (2026-09-05): a real `claude -p` run showed {'live': 1, 'busy': 1} for its two seconds of life and {'live': 0, 'busy': 0} after exit; the idle branch is covered by a unit test with a 120 s old transcript. The stat runs inside collect_snapshot on the worker, so a large projects tree costs the main thread nothing.
+- Not filtered by account (audit B5): session records carry no org, so the count is all live CLI sessions on the Mac. Correct for the warning's purpose (any live session gets the ~30 s credential lag).
+- Tests: 35.
