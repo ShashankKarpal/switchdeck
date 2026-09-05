@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SwitchBar (switchdeck v1.8): menu bar account switcher + usage deck.
+"""SwitchDeck: menu bar account switcher + usage deck.
 
 Wraps cswap (claude-swap) to switch between two same-email Claude Code
 accounts and shows per-account 5h/7d usage. Owns only the surface; the
@@ -91,8 +91,13 @@ AUTO_NARRATE = True
 # Engine contract: the cswap release and JSON schemaVersion this build is
 # validated against (CLAUDE.md decision log). Drift shows a warning row and
 # nothing else changes; there is no auto-upgrade. Not overridable locally.
-VALIDATED_ENGINE = "0.25.0"
+# 0.26.0 revalidated 2026-09-05 (round trip, distinct org identities, MCP
+# config byte-identical); additive fields since 0.25.0 are read defensively.
+VALIDATED_ENGINE = "0.26.0"
 VALIDATED_SCHEMA_VERSION = 1
+# A served usage number older than this gets an age marker on the row, so
+# a stalled engine poll is visible instead of looking current.
+USAGE_AGE_MARK_SECONDS = 300
 
 try:
     import local_settings as _ls
@@ -451,9 +456,16 @@ def last_project():
 def log_click(text):
     """Append one line to the click log, created 0600. The log carries org
     names and project basenames, an activity trail no other local user or
-    process needs to read (audit 2026-09-02)."""
+    process needs to read (audit 2026-09-02). The mode is also enforced on a
+    file that already exists: the 2026-09-02 fix only applied at creation,
+    so the log created in July stayed 0644 until 2026-09-05."""
     try:
         fd = os.open(CLICK_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        try:
+            if os.fstat(fd).st_mode & 0o077:
+                os.fchmod(fd, 0o600)
+        except OSError:
+            pass
         with os.fdopen(fd, "a") as f:
             f.write("%s %s\n" % (_dt.datetime.now().isoformat(timespec="seconds"), text))
     except OSError:
@@ -484,13 +496,34 @@ def fmt_usage(u):
     return " - ".join(parts) if parts else "usage n/a"
 
 
+def _age_mark(seconds):
+    """'12m old' or '3h old' for a served usage number older than
+    USAGE_AGE_MARK_SECONDS; None when fresh or unknown."""
+    try:
+        s = float(seconds)
+    except (TypeError, ValueError):
+        return None
+    if s < USAGE_AGE_MARK_SECONDS:
+        return None
+    if s < 3600:
+        return "%dm old" % int(s // 60)
+    if s < 86400:
+        return "%dh old" % int(s // 3600)
+    return "%dd old" % int(s // 86400)
+
+
 def usage_line(acc):
-    """Inline usage for one slot. cswap 0.25.x sets usage to null when the
-    live fetch fails and parks the last success in lastGoodUsage, with
-    usageStatus and lastGoodAgeSeconds explaining the failure."""
+    """Inline usage for one slot. cswap 0.25.x and 0.26.x set usage to null
+    when the live fetch fails and park the last success in lastGoodUsage,
+    with usageStatus and lastGoodAgeSeconds explaining the failure. A
+    non-null usage carries usageAgeSeconds (0.26.0, additive): the row gets
+    an age marker when the served number is older than USAGE_AGE_MARK_SECONDS,
+    so a stalled engine poll cannot pass for a current reading."""
     u = acc.get("usage")
     if isinstance(u, dict):
-        return fmt_usage(u)
+        line = fmt_usage(u)
+        mark = _age_mark(acc.get("usageAgeSeconds"))
+        return "%s (%s)" % (line, mark) if mark else line
     lg = acc.get("lastGoodUsage")
     if not isinstance(lg, dict):
         return "usage n/a"

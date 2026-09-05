@@ -110,6 +110,7 @@ Click the menu bar item. Each account row shows usage and switches on click. Wit
 switchdeck.py                   the rumps menu bar app
 scripts/install.sh              install or repair, idempotent (bundle, LaunchAgent, venv)
 scripts/selftest_notify.py      notification delivery self-test
+tests/                          unit tests for the formatting and engine-contract functions
 local_settings.example.py       label and path placeholders
 docs/                           audits and state notes
 com.shashank.switchdeck.plist   LaunchAgent template for run at login
