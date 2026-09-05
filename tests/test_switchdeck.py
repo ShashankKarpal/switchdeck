@@ -231,8 +231,62 @@ class TitleText(unittest.TestCase):
         sd.TITLE_USAGE = False
         self.assertEqual(sd.title_text(self.DATA), u"⇄ 2")
 
+    def test_title_carries_pending_count_for_the_active_slot_only(self):
+        self.assertEqual(sd.title_text(self.DATA, badge={1: 4, 2: 3}), u"⇄ 2 45% [3]")
+        self.assertEqual(sd.title_text(self.DATA, badge={1: 4, 2: 0}), u"⇄ 2 45%")
+        self.assertEqual(sd.title_text(self.DATA, badge=None), u"⇄ 2 45%")
 
-class DrivingWindow(unittest.TestCase):
+
+class BadgeCounts(unittest.TestCase):
+    def setUp(self):
+        self.saved = (sd.BADGE_CMD, sd.BADGE_SLOT_KEYS, sd._run)
+        sd.BADGE_SLOT_KEYS = {1: "kk1", 2: "kk2"}
+
+    def tearDown(self):
+        sd.BADGE_CMD, sd.BADGE_SLOT_KEYS, sd._run = self.saved
+
+    def test_parse_maps_account_keys_to_slots(self):
+        out = '{"schemaVersion": 1, "accounts": {"kk1": 4, "kk2": 3}}'
+        self.assertEqual(sd.parse_badge(out), {1: 4, 2: 3})
+
+    def test_unknown_schema_or_error_or_junk_is_none(self):
+        self.assertIsNone(sd.parse_badge('{"schemaVersion": 2, "accounts": {"kk1": 1}}'))
+        self.assertIsNone(sd.parse_badge('{"schemaVersion": 1, "error": "BridgeRootMissing"}'))
+        self.assertIsNone(sd.parse_badge("not json"))
+        self.assertIsNone(sd.parse_badge(""))
+
+    def test_counts_are_non_negative_ints_only(self):
+        out = '{"schemaVersion": 1, "accounts": {"kk1": "4", "kk2": -1, "kk3": 7}}'
+        self.assertEqual(sd.parse_badge(out), {})
+
+    def test_badge_off_by_default_and_runs_command_when_set(self):
+        sd.BADGE_CMD = None
+        self.assertIsNone(sd.badge_counts())
+        sd.BADGE_CMD = ["fake-badge"]
+        seen = {}
+
+        def fake_run(cmd, timeout=30):
+            seen["cmd"], seen["timeout"] = cmd, timeout
+            return 0, '{"schemaVersion": 1, "accounts": {"kk1": 0, "kk2": 2}}', ""
+
+        sd._run = fake_run
+        self.assertEqual(sd.badge_counts(), {1: 0, 2: 2})
+        self.assertEqual(seen["cmd"], ["fake-badge"])
+        self.assertLessEqual(seen["timeout"], 10)
+
+    def test_failed_command_is_none(self):
+        sd.BADGE_CMD = ["fake-badge"]
+        sd._run = lambda cmd, timeout=30: (1, '{"schemaVersion": 1, "error": "X"}', "")
+        self.assertIsNone(sd.badge_counts())
+
+    def test_row_and_title_suffixes(self):
+        self.assertEqual(sd.badge_suffix({1: 4, 2: 0}, 1), " - 4 pending")
+        self.assertEqual(sd.badge_suffix({1: 4, 2: 0}, 2), "")
+        self.assertEqual(sd.badge_suffix(None, 1), "")
+        self.assertEqual(sd.badge_suffix({1: 1}, 1), " - 1 pending")
+
+
+class TitleText(unittest.TestCase):
     def test_picks_window_over_threshold(self):
         poll = {"threshold": 90, "windowsPct": {"1": {"fiveHour": 91, "sevenDay": 95}}}
         self.assertEqual(sd.driving_window(poll, 1), ("sevenDay", 95))

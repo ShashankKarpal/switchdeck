@@ -37,6 +37,16 @@ With delivery proven, the audit's resume card ships: a switch notification
 names the target slot, the verified active org, live CLI session count, and
 the project you were last working in, degrading to the previous text on any
 parse failure.
+
+v2.0 (2026-09-05): engine contract revalidated on claude-swap 0.26.0; engine
+calls moved to a worker thread with a main-thread apply timer (RefreshPump);
+each slot row shows every window the engine reports, the reset clock of the
+tightest one and a pace chip from the engine's own verdicts; the live-session
+line says busy or idle from transcript mtime (never read); the title carries
+the active slot's tightest window percent; optional Desktop app slots
+(desktop_slots.py) open one Claude Desktop per account; optional pending badge
+from a local command (BADGE_CMD); unit tests under tests/. Details and every
+ruling: CLAUDE.md, 2026-09-05 entries.
 """
 import datetime as _dt
 import json
@@ -99,6 +109,15 @@ AUTO_NARRATE = True
 # Menu bar title carries the active slot's tightest window ("⇄ 2 45%") so
 # headroom is visible without opening the menu. False shows the label only.
 TITLE_USAGE = True
+# Pending badge, off by default. BADGE_CMD is any local command that prints
+# {"schemaVersion": 1, "accounts": {"<key>": <count>, ...}} on stdout (counts
+# only, nothing else); BADGE_SLOT_KEYS maps each slot to its key. A count
+# above zero renders " - N pending" on the slot row and "[N]" in the title
+# for the active slot. The command runs on the worker each tick; a failing
+# or absent command renders nothing. Set both in gitignored local_settings.
+BADGE_CMD = None
+BADGE_SLOT_KEYS = {1: "1", 2: "2"}
+BADGE_SCHEMA_VERSION = 1
 
 # Engine contract: the cswap release and JSON schemaVersion this build is
 # validated against (CLAUDE.md decision log). Drift shows a warning row and
@@ -116,7 +135,7 @@ try:
     for _k in ("CSWAP_BIN", "SLOT_LABELS", "SHORT_LABELS", "CLICK_LOG",
                "REFRESH_SECONDS", "CODEX_REFRESH_SECONDS", "CODEX_USAGE_CMD",
                "CODEX_LAUNCH_CMD", "AUTO_NARRATE", "NOTIFY_FALLBACK_SOUND",
-               "TITLE_USAGE"):
+               "TITLE_USAGE", "BADGE_CMD", "BADGE_SLOT_KEYS"):
         if hasattr(_ls, _k):
             globals()[_k] = getattr(_ls, _k)
 except ImportError:
@@ -632,7 +651,51 @@ def _age_mark(seconds):
     return "%dd old" % int(s // 86400)
 
 
-def title_text(data):
+def parse_badge(out):
+    """{slot: count} from a BADGE_CMD payload, or None when the payload is
+    not the contract: wrong schemaVersion (a newer one is unknown, not
+    trusted), an error envelope, or not JSON. Keys not mapped to a slot are
+    ignored; a count that is not a non-negative int is dropped."""
+    try:
+        d = json.loads(out or "")
+    except ValueError:
+        return None
+    if not isinstance(d, dict) or d.get("schemaVersion") != BADGE_SCHEMA_VERSION:
+        return None
+    if "error" in d or not isinstance(d.get("accounts"), dict):
+        return None
+    by_key = d["accounts"]
+    counts = {}
+    for slot, key in (BADGE_SLOT_KEYS or {}).items():
+        v = by_key.get(str(key))
+        if isinstance(v, int) and not isinstance(v, bool) and v >= 0:
+            try:
+                counts[int(slot)] = v
+            except (TypeError, ValueError):
+                continue
+    return counts
+
+
+def badge_counts():
+    """Run BADGE_CMD (worker thread) and parse it; None when unset, failing,
+    or off-contract. Short timeout: a badge is decoration, never a stall."""
+    if not BADGE_CMD:
+        return None
+    rc, out, _err = _run(list(BADGE_CMD), timeout=10)
+    if rc != 0:
+        return None
+    return parse_badge(out)
+
+
+def badge_suffix(badge, slot):
+    """' - N pending' for a slot with pending items, else ''."""
+    if not isinstance(badge, dict):
+        return ""
+    n = badge.get(slot)
+    return " - %d pending" % n if isinstance(n, int) and n > 0 else ""
+
+
+def title_text(data, badge=None):
     """Menu bar title: the active slot's short label plus, when TITLE_USAGE
     is on and the engine served live usage, the tightest window's percent
     ("⇄ 2 45%"). The tightest window is the same one that carries the reset
@@ -653,6 +716,10 @@ def title_text(data):
     title = u"⇄ %s" % _lbl(SHORT_LABELS, active_no, "?")
     if TITLE_USAGE and pct is not None:
         title = u"%s %d%%" % (title, round(pct))
+    if isinstance(badge, dict) and active_no is not None:
+        n = badge.get(active_no)
+        if isinstance(n, int) and n > 0:
+            title = u"%s [%d]" % (title, n)
     return title
 
 
@@ -751,7 +818,7 @@ def collect_snapshot():
     act = session_activity(live_claude_sessions())
     return {"data": data, "warn": warn, "auto": auto, "org": org,
             "live": act["live"], "busy": act["busy"],
-            "desktop": desktop_status()}
+            "desktop": desktop_status(), "badge": badge_counts()}
 
 
 def desktop_status():
@@ -896,7 +963,7 @@ class SwitchDeck(rumps.App):
             auto_row = out.menu_row
         self._render(snap["data"], snap["warn"], auto_row, snap["org"],
                      {"live": snap.get("live", 0), "busy": snap.get("busy", 0)},
-                     desktop=snap.get("desktop") or [])
+                     desktop=snap.get("desktop") or [], badge=snap.get("badge"))
 
     def _render_loading(self):
         self.title = u"⇄ ?"
@@ -906,14 +973,16 @@ class SwitchDeck(rumps.App):
         self.menu.add(rumps.MenuItem("Refresh", callback=self.refresh_all))
         self.menu.add(rumps.MenuItem("Quit", callback=self._quit))
 
-    def _render(self, data, warn, auto_row, org, act, extra_row=None, desktop=()):
+    def _render(self, data, warn, auto_row, org, act, extra_row=None, desktop=(),
+                badge=None):
         items = []
         if data and isinstance(data.get("accounts"), list):
             for acc in sorted(data["accounts"], key=lambda a: a.get("number", 0)):
                 n = acc.get("number")
                 label = _lbl(SLOT_LABELS, n, "slot %s" % n)
                 mark = u"✓ " if acc.get("active") else "     "
-                title = "%s%s  -  %s" % (mark, label, usage_line(acc))
+                title = "%s%s  -  %s%s" % (mark, label, usage_line(acc),
+                                           badge_suffix(badge, n))
                 cb = None if acc.get("active") else self._make_switch(n, label)
                 items.append(rumps.MenuItem(title, callback=cb))
         else:
@@ -925,7 +994,7 @@ class SwitchDeck(rumps.App):
             items.append(rumps.MenuItem(auto_row, callback=None))
         if extra_row:
             items.append(rumps.MenuItem(extra_row, callback=None))
-        self.title = title_text(data)
+        self.title = title_text(data, badge)
         items.append(rumps.separator)
         if CODEX_USAGE_CMD:
             items.append(rumps.MenuItem(self.codex_line + "  -  click to open",

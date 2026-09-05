@@ -1,6 +1,8 @@
 # Roadmap (behavior-gated)
 
 > Superseded 2026-08-17: the v2/v3 items and future candidates below were red-teamed and replaced; [docs/redteam-audit-2026-08-17.md](docs/redteam-audit-2026-08-17.md) (addendum) is the current plan.
+>
+> 2026-09-05: the audit's top five all shipped (v1.7 to v1.9.1), and v2.0 shipped the next set under the ratified 4-of-any-6-weeks gate (which passed, six of six weeks): worker-thread refresh, reset time and pace per window, busy or idle sessions, title headroom, Desktop app slots, pending badge, unit tests. The v3 "proactive" item below stays unbuilt by owner decision: dry-run narration is the feature, real auto-switch is not wanted. Remaining horizon: the Swift MenuBarExtra rewrite. The record of each decision is in [CLAUDE.md](CLAUDE.md).
 
 Each version ships only after the previous version's behavior signal is proven. One logged exception below.
 

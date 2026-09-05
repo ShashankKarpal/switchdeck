@@ -20,6 +20,13 @@ SHORT_LABELS = {1: "1", 2: "2"}                # menu bar title suffix
 # "⇄ 2 45%". Set False for the label only.
 # TITLE_USAGE = False
 
+# Optional pending badge, OFF by default. Any local command that prints
+#   {"schemaVersion": 1, "accounts": {"<key>": <count>, ...}}
+# on stdout (counts only). A count above zero shows " - N pending" on that
+# slot's row and "[N]" in the title for the active slot. Map slots to keys:
+# BADGE_CMD = ["/usr/bin/python3", "/path/to/your/badge-command", "--json"]
+# BADGE_SLOT_KEYS = {1: "work", 2: "personal"}
+
 # The Codex row launches Ghostty by default. Point this at any terminal:
 # CODEX_LAUNCH_CMD = ["open", "-na", "Terminal", "--args", "-e", "codex"]
 # CODEX_LAUNCH_CMD = ["open", "-na", "iTerm", "--args", "-e", "codex"]
