@@ -38,7 +38,8 @@
 
 ### Usage
 
-- **Claude quota windows** read from the engine's JSON output, with a staleness marker when the engine serves a cached last-good value.
+- **Claude quota windows** read from the engine's JSON output: 5 hour, 7 day and any per-model weekly window the engine reports (for example a Fable window), with a staleness marker when the engine serves a cached last-good value and an age marker when the served number is more than five minutes old.
+- **Reset time and pace, from the engine.** The tightest window shows the engine's reset clock inline, and a one-word pace chip (on pace, ahead of pace, will cap early) summarizes the engine's own weekly pace verdicts. Nothing is recomputed here.
 - **Engine contract.** The validated cswap version and JSON schema are pinned; drift shows a warning row instead of failing silently.
 - **Refresh on demand.** The manual Refresh also refreshes Codex when that row is enabled; the automatic timer never does.
 - **Codex row (opt-in, off by default).** Token and cost via ccusage; clicking it launches Codex in a terminal. Claude and Codex credentials coexist, so switching tools is a launch, not a credential swap.

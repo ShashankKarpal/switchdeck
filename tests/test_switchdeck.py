@@ -52,15 +52,58 @@ class FormatUsage(unittest.TestCase):
         u = {"sevenDay": {"pct": 40.4}, "fiveHour": {"pct": 91.6}, "spend": {"pct": 10}}
         self.assertEqual(sd.fmt_usage(u), "5h 92% - 7d 40% - spend 10%")
 
-    def test_scoped_list_is_ignored_and_unknown_dict_is_appended(self):
-        # 0.26.0 sends scoped as a list of per-model windows; it must not
-        # break the row. An unknown dict window renders under its raw key.
-        u = {"fiveHour": {"pct": 5}, "scoped": [{"pct": 50}], "later": {"pct": 7}}
-        self.assertEqual(sd.fmt_usage(u), "5h 5% - later 7%")
+    def test_scoped_windows_render_by_name_after_7d_and_unknown_dict_last(self):
+        # 0.26.0 sends scoped as a list of per-model weekly windows carrying
+        # a name; they render after 7d under that name. An unknown dict
+        # window still renders under its raw key, last.
+        u = {"fiveHour": {"pct": 5}, "spend": {"pct": 1},
+             "scoped": [{"pct": 50, "name": "Fable"}, {"pct": 3}],
+             "later": {"pct": 7}}
+        self.assertEqual(sd.fmt_usage(u), "5h 5% - Fable 50% - scoped 3% - spend 1% - later 7%")
 
     def test_empty_or_wrong_type(self):
         self.assertEqual(sd.fmt_usage(None), "usage n/a")
         self.assertEqual(sd.fmt_usage({}), "usage n/a")
+
+
+class RichUsage(unittest.TestCase):
+    LIVE = {"fiveHour": {"pct": 25.0, "clock": "15:30", "countdown": "4h 27m"},
+            "sevenDay": {"pct": 23.0, "clock": "Sep 7 17:30", "aheadOfPace": False,
+                         "willLastToReset": True},
+            "scoped": [{"pct": 45.0, "name": "Fable", "clock": "Sep 7 17:30",
+                        "aheadOfPace": False, "willLastToReset": True}]}
+
+    def test_reset_clock_follows_the_tightest_window(self):
+        self.assertEqual(sd.fmt_usage_rich(self.LIVE),
+                         "5h 25% - 7d 23% - Fable 45% (resets Sep 7 17:30) - on pace")
+
+    def test_reset_clock_omitted_when_engine_gives_none(self):
+        u = {"fiveHour": {"pct": 60}, "sevenDay": {"pct": 10}}
+        self.assertEqual(sd.fmt_usage_rich(u), "5h 60% - 7d 10%")
+
+    def test_pace_chip_states(self):
+        self.assertIsNone(sd.pace_chip({"fiveHour": {"pct": 1}}))
+        self.assertEqual(sd.pace_chip({"sevenDay": {"pct": 1, "aheadOfPace": False,
+                                                    "willLastToReset": True}}), "on pace")
+        self.assertEqual(sd.pace_chip({"sevenDay": {"pct": 1, "aheadOfPace": True,
+                                                    "willLastToReset": True}}), "ahead of pace")
+        # Any weekly window that will not last to its reset wins.
+        self.assertEqual(sd.pace_chip({"sevenDay": {"pct": 1, "aheadOfPace": False,
+                                                    "willLastToReset": True},
+                                       "scoped": [{"pct": 90, "name": "Fable",
+                                                   "aheadOfPace": True,
+                                                   "willLastToReset": False}]}),
+                         "will cap early")
+        # 0.25.0 shape: no pace fields at all, no chip.
+        self.assertIsNone(sd.pace_chip({"sevenDay": {"pct": 40}}))
+
+    def test_usage_line_uses_rich_form_for_live_and_plain_for_last_good(self):
+        acc = {"usage": self.LIVE, "usageAgeSeconds": 12}
+        self.assertTrue(sd.usage_line(acc).endswith("(resets Sep 7 17:30) - on pace"))
+        stale = {"usage": None, "usageStatus": "unavailable",
+                 "lastGoodUsage": self.LIVE, "lastGoodAgeSeconds": 4000}
+        self.assertEqual(sd.usage_line(stale),
+                         "5h 25% - 7d 23% - Fable 45% (stale <1d, unavailable)")
 
 
 class UsageLine(unittest.TestCase):

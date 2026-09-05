@@ -475,25 +475,80 @@ def log_click(text):
 USAGE_WINDOWS = (("fiveHour", "5h"), ("sevenDay", "7d"), ("spend", "spend"))
 
 
-def fmt_usage(u):
-    """Known windows first in a fixed order (5h, 7d, spend), then anything
-    the engine adds later under its raw key, so the row never reorders
-    between ticks and a spend_limit window gets a readable label."""
+def usage_windows(u):
+    """The usage windows of one slot as (label, window dict) in a fixed
+    order: 5h, 7d, then the engine's scoped per-model weekly windows under
+    their own name (0.26.0: e.g. Fable), then spend, then anything the
+    engine adds later under its raw key. Fixed order keeps the row from
+    reordering between ticks. Windows without a pct are skipped."""
+    out = []
     if not isinstance(u, dict):
-        return "usage n/a"
-    parts = []
-    seen = set()
-    for key, label in USAGE_WINDOWS:
-        win = u.get(key)
+        return out
+    seen = {"scoped"}
+
+    def _add(label, win):
+        if isinstance(win, dict) and win.get("pct") is not None:
+            out.append((label, win))
+
+    for key, label in USAGE_WINDOWS[:2]:
         seen.add(key)
-        if isinstance(win, dict) and win.get("pct") is not None:
-            parts.append("%s %d%%" % (label, round(win["pct"])))
+        _add(label, u.get(key))
+    scoped = u.get("scoped")
+    if isinstance(scoped, list):
+        for win in scoped:
+            if isinstance(win, dict):
+                _add(str(win.get("name") or "scoped"), win)
+    for key, label in USAGE_WINDOWS[2:]:
+        seen.add(key)
+        _add(label, u.get(key))
     for key, win in u.items():
-        if key in seen:
-            continue
-        if isinstance(win, dict) and win.get("pct") is not None:
-            parts.append("%s %d%%" % (key, round(win["pct"])))
+        if key not in seen:
+            _add(key, win)
+    return out
+
+
+def fmt_usage(u):
+    """Plain percentages: '5h 25% - 7d 23% - Fable 45%'."""
+    parts = ["%s %d%%" % (label, round(win["pct"])) for label, win in usage_windows(u)]
     return " - ".join(parts) if parts else "usage n/a"
+
+
+def pace_chip(u):
+    """One word on the weekly pace, from the engine's own verdict fields
+    (0.26.0: aheadOfPace and willLastToReset on 7d and scoped windows; the
+    engine computes them, this app only reads them). 'will cap early' if
+    any weekly window will not last to its reset, else 'ahead of pace' if
+    any is ahead, else 'on pace'. None when the engine sent no verdict
+    (0.25.0 shape, or a window too fresh after reset to judge)."""
+    verdicts = []
+    for _label, win in usage_windows(u):
+        if "willLastToReset" in win or "aheadOfPace" in win:
+            verdicts.append(win)
+    if not verdicts:
+        return None
+    if any(w.get("willLastToReset") is False for w in verdicts):
+        return "will cap early"
+    if any(w.get("aheadOfPace") is True for w in verdicts):
+        return "ahead of pace"
+    return "on pace"
+
+
+def fmt_usage_rich(u):
+    """fmt_usage plus the reset time of the tightest window (the engine's
+    own local-time 'clock' string, never recomputed here) and the pace
+    chip: '5h 25% - 7d 23% - Fable 45% (resets Sep 7 17:30) - on pace'."""
+    wins = usage_windows(u)
+    if not wins:
+        return "usage n/a"
+    parts = ["%s %d%%" % (label, round(win["pct"])) for label, win in wins]
+    with_clock = [(i, win) for i, (_l, win) in enumerate(wins) if win.get("clock")]
+    if with_clock:
+        i, win = max(with_clock, key=lambda t: t[1]["pct"])
+        parts[i] = "%s (resets %s)" % (parts[i], win["clock"])
+    chip = pace_chip(u)
+    if chip:
+        parts.append(chip)
+    return " - ".join(parts)
 
 
 def _age_mark(seconds):
@@ -521,7 +576,7 @@ def usage_line(acc):
     so a stalled engine poll cannot pass for a current reading."""
     u = acc.get("usage")
     if isinstance(u, dict):
-        line = fmt_usage(u)
+        line = fmt_usage_rich(u)
         mark = _age_mark(acc.get("usageAgeSeconds"))
         return "%s (%s)" % (line, mark) if mark else line
     lg = acc.get("lastGoodUsage")
