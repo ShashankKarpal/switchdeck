@@ -91,6 +91,9 @@ CODEX_LAUNCH_CMD = ["open", "-na", "Ghostty", "--args", "-e", "codex"]
 # mode would do each tick; nothing is ever switched. The only knob here is
 # off/on: thresholds, cooldown, and strategy are engine config, not ours.
 AUTO_NARRATE = True
+# Menu bar title carries the active slot's tightest window ("⇄ 2 45%") so
+# headroom is visible without opening the menu. False shows the label only.
+TITLE_USAGE = True
 
 # Engine contract: the cswap release and JSON schemaVersion this build is
 # validated against (CLAUDE.md decision log). Drift shows a warning row and
@@ -107,7 +110,8 @@ try:
     import local_settings as _ls
     for _k in ("CSWAP_BIN", "SLOT_LABELS", "SHORT_LABELS", "CLICK_LOG",
                "REFRESH_SECONDS", "CODEX_REFRESH_SECONDS", "CODEX_USAGE_CMD",
-               "CODEX_LAUNCH_CMD", "AUTO_NARRATE", "NOTIFY_FALLBACK_SOUND"):
+               "CODEX_LAUNCH_CMD", "AUTO_NARRATE", "NOTIFY_FALLBACK_SOUND",
+               "TITLE_USAGE"):
         if hasattr(_ls, _k):
             globals()[_k] = getattr(_ls, _k)
 except ImportError:
@@ -623,6 +627,30 @@ def _age_mark(seconds):
     return "%dd old" % int(s // 86400)
 
 
+def title_text(data):
+    """Menu bar title: the active slot's short label plus, when TITLE_USAGE
+    is on and the engine served live usage, the tightest window's percent
+    ("⇄ 2 45%"). The tightest window is the same one that carries the reset
+    clock on the row. No number for last-good (stale) data: the title is
+    glanced at, so it shows only what is current."""
+    active_no = None
+    pct = None
+    if isinstance(data, dict) and isinstance(data.get("accounts"), list):
+        active_no = data.get("activeAccountNumber")
+        for acc in data["accounts"]:
+            if isinstance(acc, dict) and acc.get("active"):
+                if active_no is None:
+                    active_no = acc.get("number")
+                wins = usage_windows(acc.get("usage"))
+                if wins:
+                    pct = max(win["pct"] for _l, win in wins)
+                break
+    title = u"⇄ %s" % _lbl(SHORT_LABELS, active_no, "?")
+    if TITLE_USAGE and pct is not None:
+        title = u"%s %d%%" % (title, round(pct))
+    return title
+
+
 def usage_line(acc):
     """Inline usage for one slot. cswap 0.25.x and 0.26.x set usage to null
     when the live fetch fails and park the last success in lastGoodUsage,
@@ -862,9 +890,7 @@ class SwitchDeck(rumps.App):
 
     def _render(self, data, warn, auto_row, org, act, extra_row=None):
         items = []
-        active_no = None
         if data and isinstance(data.get("accounts"), list):
-            active_no = data.get("activeAccountNumber")
             for acc in sorted(data["accounts"], key=lambda a: a.get("number", 0)):
                 n = acc.get("number")
                 label = _lbl(SLOT_LABELS, n, "slot %s" % n)
@@ -881,7 +907,7 @@ class SwitchDeck(rumps.App):
             items.append(rumps.MenuItem(auto_row, callback=None))
         if extra_row:
             items.append(rumps.MenuItem(extra_row, callback=None))
-        self.title = u"⇄ %s" % _lbl(SHORT_LABELS, active_no, "?")
+        self.title = title_text(data)
         items.append(rumps.separator)
         if CODEX_USAGE_CMD:
             items.append(rumps.MenuItem(self.codex_line + "  -  click to open",

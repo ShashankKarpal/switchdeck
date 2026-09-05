@@ -16,6 +16,10 @@ SHORT_LABELS = {1: "1", 2: "2"}                # menu bar title suffix
 # line when the engine's auto mode would have switched; nothing is switched).
 # AUTO_NARRATE = False
 
+# The menu bar title shows the active slot's tightest usage window, e.g.
+# "⇄ 2 45%". Set False for the label only.
+# TITLE_USAGE = False
+
 # The Codex row launches Ghostty by default. Point this at any terminal:
 # CODEX_LAUNCH_CMD = ["open", "-na", "Terminal", "--args", "-e", "codex"]
 # CODEX_LAUNCH_CMD = ["open", "-na", "iTerm", "--args", "-e", "codex"]

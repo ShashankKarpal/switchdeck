@@ -83,3 +83,9 @@
 - PROOF (2026-09-05): a real `claude -p` run showed {'live': 1, 'busy': 1} for its two seconds of life and {'live': 0, 'busy': 0} after exit; the idle branch is covered by a unit test with a 120 s old transcript. The stat runs inside collect_snapshot on the worker, so a large projects tree costs the main thread nothing.
 - Not filtered by account (audit B5): session records carry no org, so the count is all live CLI sessions on the Mac. Correct for the warning's purpose (any live session gets the ~30 s credential lag).
 - Tests: 35.
+
+## 2026-09-05 (fifth): headroom in the menu bar title
+- The title is now "⇄ kk2 52%": the active slot's short label plus its tightest window's used percent, the same window that carries the reset clock on the row. Headroom is visible without opening the menu. `TITLE_USAGE = False` in local_settings restores the label-only title; the knob exists because menu bar width is the owner's call, not the app's.
+- No number when the engine served last-good (stale) data or no data: a glanced-at title shows only what is current; the row keeps the stale marker for the detail.
+- The 2026-08-17 decision that the title is TEXT (no template icon) is unchanged; this adds text.
+- Tests: 39. Live check: title matched the engine's highest window pct for the active slot.

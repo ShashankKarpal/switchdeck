@@ -95,6 +95,7 @@ SHORT_LABELS = {1: "1", 2: "2"}                # menu bar title suffix
 # REFRESH_SECONDS = 300
 # CODEX_REFRESH_SECONDS = 1800
 # AUTO_NARRATE = False   # dry-run auto-switch narration is on by default
+# TITLE_USAGE = False    # menu bar title shows the active slot's tightest window percent by default
 # Codex row is off by default (no network calls in a stock install). Enable:
 # CODEX_USAGE_CMD = ["npx", "-y", "ccusage@latest", "codex", "--json"]
 # CODEX_LAUNCH_CMD = ["open", "-na", "Terminal", "--args", "-e", "codex"]  # default launcher is Ghostty; set your own terminal here

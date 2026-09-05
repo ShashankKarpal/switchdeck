@@ -199,6 +199,39 @@ class SessionActivity(unittest.TestCase):
                          "2 live CLI session(s), 1 busy: switch applies in ~30s, not mid-reply")
 
 
+class TitleText(unittest.TestCase):
+    DATA = {"activeAccountNumber": 2, "accounts": [
+        {"number": 1, "active": False, "usage": {"fiveHour": {"pct": 80}}},
+        {"number": 2, "active": True, "usage": {"fiveHour": {"pct": 25.4},
+                                                "sevenDay": {"pct": 23},
+                                                "scoped": [{"pct": 45.2, "name": "Fable"}]}}]}
+
+    def setUp(self):
+        self.saved = (sd.SHORT_LABELS, sd.TITLE_USAGE)
+        sd.SHORT_LABELS = {1: "1", 2: "2"}
+        sd.TITLE_USAGE = True
+
+    def tearDown(self):
+        sd.SHORT_LABELS, sd.TITLE_USAGE = self.saved
+
+    def test_title_carries_tightest_window_of_the_active_slot(self):
+        self.assertEqual(sd.title_text(self.DATA), u"⇄ 2 45%")
+
+    def test_title_without_live_usage_is_label_only(self):
+        data = {"activeAccountNumber": 2, "accounts": [
+            {"number": 2, "active": True, "usage": None,
+             "lastGoodUsage": {"fiveHour": {"pct": 90}}}]}
+        self.assertEqual(sd.title_text(data), u"⇄ 2")
+
+    def test_title_without_engine_data(self):
+        self.assertEqual(sd.title_text(None), u"⇄ ?")
+        self.assertEqual(sd.title_text({"accounts": []}), u"⇄ ?")
+
+    def test_title_usage_can_be_switched_off_locally(self):
+        sd.TITLE_USAGE = False
+        self.assertEqual(sd.title_text(self.DATA), u"⇄ 2")
+
+
 class DrivingWindow(unittest.TestCase):
     def test_picks_window_over_threshold(self):
         poll = {"threshold": 90, "windowsPct": {"1": {"fiveHour": 91, "sevenDay": 95}}}
