@@ -53,6 +53,12 @@
 - Real auto-switching stays off. It is the engine's feature, not this app's; enabling it is a deliberate engine-side decision (`cswap auto`), and its thresholds, cooldown, and strategy are engine config that this app neither reads nor sets.
 - Set `AUTO_NARRATE = False` in `local_settings.py` to silence narration entirely.
 
+### Desktop app slots (optional)
+
+- **One Claude Desktop per account, side by side.** `scripts/desktop_slots.py build` installs a small launcher app per slot into `~/Applications` (for example `Claude kk1.app`). Each opens Claude Desktop on its own profile folder (`~/Library/Application Support/Claude Slot N`) with `--user-data-dir`, so you sign into the second account there once and both run at the same time. If that profile is already open, the launcher brings it to the front instead of starting a second copy.
+- **Safe by construction.** Launchers are identified by a marker key in their Info.plist, never by name; the installer refuses to replace any app it did not create and never deletes a profile folder. Needs the Xcode command line tools once, to compile the launcher.
+- SwitchDeck shows an "Open Desktop: <label>" row per installed launcher, with "(running)" when that profile is open. The CLI login is separate: Claude Code keeps one machine login, the desktop profiles keep their own.
+
 ### Operations
 
 - **LaunchAgent for run at login.**
@@ -111,7 +117,9 @@ Click the menu bar item. Each account row shows usage and switches on click. Wit
 
 ```
 switchdeck.py                   the rumps menu bar app
+desktop_slots.py                Desktop app slot shims: plist, marker, running detection
 scripts/install.sh              install or repair, idempotent (bundle, LaunchAgent, venv)
+scripts/desktop_slots.py        build, status, remove the Desktop app slot launchers
 scripts/selftest_notify.py      notification delivery self-test
 tests/                          unit tests for the formatting and engine-contract functions
 local_settings.example.py       label and path placeholders

@@ -375,9 +375,26 @@ class CollectSnapshot(unittest.TestCase):
             self.assertEqual(snap["org"], "Org")
             self.assertEqual(snap["live"], 1)
             self.assertEqual(snap["busy"], 0)  # pid 1 has no transcript
+            self.assertIsInstance(snap["desktop"], list)
         finally:
             (sd.cswap_list, sd.cswap_auto_dryrun, sd.active_org,
              sd.live_claude_sessions, sd._ENGINE_VERSION, sd.AUTO_NARRATE) = saved
+
+    def test_desktop_status_never_raises(self):
+        saved = sd._desktop
+
+        class Boom(object):
+            @staticmethod
+            def status():
+                raise RuntimeError("shim exploded")
+
+        try:
+            sd._desktop = Boom
+            self.assertEqual(sd.desktop_status(), [])
+            sd._desktop = None
+            self.assertEqual(sd.desktop_status(), [])
+        finally:
+            sd._desktop = saved
 
     def test_narration_off_skips_the_dry_run(self):
         saved = (sd.cswap_list, sd.cswap_auto_dryrun, sd.active_org,

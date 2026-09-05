@@ -50,6 +50,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import rumps
 
+try:
+    import desktop_slots as _desktop
+except ImportError:  # pragma: no cover - the module ships beside this file
+    _desktop = None
+
 HOME = os.path.expanduser("~")
 
 # Defaults. Override in gitignored local_settings.py; real labels stay local.
@@ -745,7 +750,19 @@ def collect_snapshot():
     org, _u8 = active_org()
     act = session_activity(live_claude_sessions())
     return {"data": data, "warn": warn, "auto": auto, "org": org,
-            "live": act["live"], "busy": act["busy"]}
+            "live": act["live"], "busy": act["busy"],
+            "desktop": desktop_status()}
+
+
+def desktop_status():
+    """Installed Desktop app slot shims and whether each profile is open;
+    [] when none are installed or the module is unavailable."""
+    if _desktop is None:
+        return []
+    try:
+        return _desktop.status()
+    except Exception:  # noqa: BLE001 - a broken shim must not take the menu down
+        return []
 
 
 class NarrationOutcome(object):
@@ -878,7 +895,8 @@ class SwitchDeck(rumps.App):
                 _notify(APP_NAME, "Auto (dry-run)", out.notify_message)
             auto_row = out.menu_row
         self._render(snap["data"], snap["warn"], auto_row, snap["org"],
-                     {"live": snap.get("live", 0), "busy": snap.get("busy", 0)})
+                     {"live": snap.get("live", 0), "busy": snap.get("busy", 0)},
+                     desktop=snap.get("desktop") or [])
 
     def _render_loading(self):
         self.title = u"⇄ ?"
@@ -888,7 +906,7 @@ class SwitchDeck(rumps.App):
         self.menu.add(rumps.MenuItem("Refresh", callback=self.refresh_all))
         self.menu.add(rumps.MenuItem("Quit", callback=self._quit))
 
-    def _render(self, data, warn, auto_row, org, act, extra_row=None):
+    def _render(self, data, warn, auto_row, org, act, extra_row=None, desktop=()):
         items = []
         if data and isinstance(data.get("accounts"), list):
             for acc in sorted(data["accounts"], key=lambda a: a.get("number", 0)):
@@ -916,6 +934,15 @@ class SwitchDeck(rumps.App):
         live_row = live_sessions_line(act)
         if live_row:
             items.append(rumps.MenuItem(live_row, callback=None))
+        if desktop:
+            # Desktop app slots: one row per installed shim. Clicking runs the
+            # shim, whose launcher activates the open profile or starts it.
+            items.append(rumps.separator)
+            for entry in desktop:
+                label = _lbl(SHORT_LABELS, entry.get("slot"), "slot %s" % entry.get("slot"))
+                items.append(rumps.MenuItem(
+                    _desktop.desktop_row_title(entry, label),
+                    callback=self._make_open_desktop(entry)))
         items.append(rumps.separator)
         items.append(rumps.MenuItem("Refresh", callback=self.refresh_all))
         items.append(rumps.MenuItem("Quit", callback=self._quit))
@@ -953,6 +980,17 @@ class SwitchDeck(rumps.App):
             else:
                 _notify(APP_NAME, "Switch failed",
                         (err or out or "unknown error").strip()[:120])
+            self.refresh(None)
+        return _cb
+
+    def _make_open_desktop(self, entry):
+        def _cb(_sender):
+            ok = _desktop.open_shim(entry["path"]) if _desktop else False
+            log_click("menubar open-desktop slot=%s running=%s ok=%s"
+                      % (entry.get("slot"), entry.get("running"), ok))
+            if not ok:
+                _notify(APP_NAME, "Desktop slot", "Could not open %s"
+                        % os.path.basename(entry.get("path", "?")))
             self.refresh(None)
         return _cb
 
