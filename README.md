@@ -135,6 +135,7 @@ Click the menu bar item. Each account row shows usage, reset time and pace, and 
 switchdeck.py                   the rumps menu bar app
 desktop_slots.py                Desktop app slot shims: plist, marker, running detection
 scripts/install.sh              install or repair, idempotent (bundle, LaunchAgent, venv)
+scripts/make_bundle.sh          the minimal signed .app builder, shared with the other menu bar apps on this Mac
 scripts/desktop_slots.py        build, status, remove the Desktop app slot launchers
 scripts/selftest_notify.py      notification delivery self-test
 tests/                          unit tests (run: ~/.switchdeck-venv/bin/python -m unittest discover -s tests)

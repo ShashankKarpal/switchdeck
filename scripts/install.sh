@@ -68,40 +68,20 @@ uv pip install --python "$VENV/bin/python3" --quiet \
   || fail "rumps/UserNotifications not importable in the venv"
 
 step "App bundle at $APP"
+# Built by scripts/make_bundle.sh, the builder shared with the other menu bar
+# apps on this Mac (2026-09-14; these lines used to be hand-synced copies).
 # Rebuilt from scratch every run: it holds no state, and a stale interpreter
 # copy inside it is exactly the drift this script exists to prevent. The
 # copied binary diverges from uv upgrades until the next install.sh run;
 # scripts/selftest_notify.py proves the shipped configuration still works.
-rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$UVPY/bin/python3.14" "$APP/Contents/MacOS/$APP_NAME"
-cat > "$APP/Contents/Info.plist" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
-  <key>CFBundleName</key><string>$APP_NAME</string>
-  <key>CFBundleDisplayName</key><string>$APP_NAME</string>
-  <key>CFBundleExecutable</key><string>$APP_NAME</string>
-  <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>$VERSION</string>
-  <key>CFBundleVersion</key><string>$VERSION</string>
-  <key>CFBundleIconFile</key><string>AppIcon</string>
-  <key>LSUIElement</key><true/>
-  <key>NSHighResolutionCapable</key><true/>
-</dict>
-</plist>
-EOF
+ICON_ARGS=()
 if [ -d "$REPO/design/app-icons/macos/AppIcon.appiconset" ]; then
-  ICONSET="$(mktemp -d)/AppIcon.iconset"
-  cp -R "$REPO/design/app-icons/macos/AppIcon.appiconset" "$ICONSET"
-  rm -f "$ICONSET/Contents.json"
-  iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
+  ICON_ARGS=(--iconset "$REPO/design/app-icons/macos/AppIcon.appiconset")
 fi
-codesign -s - --force "$APP"
+bash "$REPO/scripts/make_bundle.sh" --name "$APP_NAME" --bundle-id "$BUNDLE_ID" \
+  --python-home "$UVPY" --version "$VERSION" --out "$HOME/Applications" \
+  ${ICON_ARGS[@]+"${ICON_ARGS[@]}"} >/dev/null || fail "bundle build failed"
 codesign -v "$APP" || fail "bundle signature invalid"
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP"
 
 step "Local settings"
 if [ ! -f "$REPO/local_settings.py" ]; then
