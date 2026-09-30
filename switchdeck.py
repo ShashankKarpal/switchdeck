@@ -510,8 +510,8 @@ def last_project():
     one clause, nothing else. Claude Code writes lastStartTime as epoch
     milliseconds (verified 2026-08-24, 11 of 17 projects carry it), but the
     type is not contractual, so the comparison coerces and skips whatever
-    will not coerce. HOME is excluded: "shashank.kk" names no project and
-    reads as a bug in a banner.
+    will not coerce. HOME is excluded: the home folder name names no
+    project and reads as a bug in a banner.
     """
     try:
         with open(CLAUDE_JSON) as f:
