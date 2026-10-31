@@ -171,7 +171,7 @@ One gate exception has been taken and is logged with its reason in [CLAUDE.md](C
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT for the source code; see [LICENSE](LICENSE). The name, logos, icons and other brand assets are not covered; see [TRADEMARKS.md](TRADEMARKS.md).
 
 ## Author
 
