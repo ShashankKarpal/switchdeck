@@ -5,14 +5,15 @@ Run from the repo root with the package venv, which provides rumps:
     ~/.switchdeck-venv/bin/python -m unittest discover -s tests -v
 
 No engine, no network, no menu bar: everything here feeds hand-built
-payloads shaped like cswap's --json output (schemaVersion 1, 0.25.0 and
-0.26.0 fields) into the formatting and contract functions.
+payloads shaped like cswap's --json output (schemaVersion 1, 0.25.0,
+0.26.0 and 0.29.0 fields) into the formatting and contract functions.
 """
 import os
 import stat
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -43,8 +44,29 @@ class EngineContract(unittest.TestCase):
 
     def test_unknown_engine_version_is_not_a_warning(self):
         # A missing engine is the retry row's job, not the warning row's.
+        # The probe is stubbed to fail: with only the cache cleared,
+        # engine_version() asks the installed cswap, and this test then
+        # passed or failed with whatever engine the Mac had.
         sd._ENGINE_VERSION = None
-        self.assertIsNone(sd.engine_warning(None))
+        with mock.patch.object(sd, "_run", return_value=(1, "", "no engine")):
+            self.assertIsNone(sd.engine_warning(None))
+
+    def test_0_29_0_payload_is_validated_and_renders_as_before(self):
+        # Revalidated 2026-11-01. 0.27 to 0.29 add optional row fields
+        # (loginExpiresAt, threshold, usageError, usageRetryAt); schemaVersion
+        # stays 1 and the row reads exactly as the base shape does.
+        sd._ENGINE_VERSION = "0.29.0"
+        payload = {"schemaVersion": 1, "activeAccountNumber": 1, "accounts": []}
+        self.assertIsNone(sd.engine_warning(payload))
+        base = {"usage": {"fiveHour": {"pct": 44.0}}, "usageAgeSeconds": 12}
+        rich = dict(base, loginExpiresAt="2027-01-01T00:00:00Z", threshold=85)
+        self.assertEqual(sd.usage_line(rich), sd.usage_line(base))
+        stale = {"usage": None, "usageStatus": "unavailable",
+                 "lastGoodUsage": {"fiveHour": {"pct": 44.0}},
+                 "lastGoodAgeSeconds": 60}
+        stale_rich = dict(stale, usageError="http-429",
+                          usageRetryAt="2026-11-01T17:00:00Z")
+        self.assertEqual(sd.usage_line(stale_rich), sd.usage_line(stale))
 
 
 class FormatUsage(unittest.TestCase):

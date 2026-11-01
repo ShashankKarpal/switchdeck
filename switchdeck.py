@@ -124,7 +124,11 @@ BADGE_SCHEMA_VERSION = 1
 # nothing else changes; there is no auto-upgrade. Not overridable locally.
 # 0.26.0 revalidated 2026-09-05 (round trip, distinct org identities, MCP
 # config byte-identical); additive fields since 0.25.0 are read defensively.
-VALIDATED_ENGINE = "0.26.0"
+# 0.29.0 revalidated 2026-11-01: schemaVersion still 1; 0.27 to 0.29 add only
+# optional row fields (loginExpiresAt, threshold, usageError, usageRetryAt)
+# and an optional weeklyThreshold on the poll event; none is read here
+# (driving_window's limit with weeklyThreshold is in the decision log).
+VALIDATED_ENGINE = "0.29.0"
 VALIDATED_SCHEMA_VERSION = 1
 # A served usage number older than this gets an age marker on the row, so
 # a stalled engine poll is visible instead of looking current.
