@@ -15,7 +15,7 @@
   <img alt="Status" src="https://img.shields.io/badge/status-v2.0-2D647F?style=flat-square">
   <img alt="Local only" src="https://img.shields.io/badge/local-only-2D647F?style=flat-square">
   <img alt="Stack" src="https://img.shields.io/badge/built%20with-Python-1A1917?style=flat-square">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-51%20unittest-1A1917?style=flat-square">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-59%20unittest-1A1917?style=flat-square">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-1A1917?style=flat-square"></a>
 </p>
 
@@ -23,7 +23,7 @@
 
 - **Switches Claude Code accounts from the menu bar in one click.** Two accounts on the same email hold separate, identity-keyed slots; the credential swap is delegated to the [claude-swap](https://github.com/realiti4/claude-swap) engine, never reimplemented.
 - **Shows every quota window per account, inline.** 5 hour, 7 day and any per-model weekly window the engine reports (a Fable window, for example), the reset time of the tightest window, and a one-word pace verdict: on pace, ahead of pace, will cap early.
-- **Keeps headroom in the menu bar title.** `⇄ kk2 45%` is the active account and its tightest window, readable without opening the menu.
+- **Keeps headroom in the menu bar title.** `⇄ 2 45%` is the active slot's short label and its tightest window, readable without opening the menu.
 - **Knows when a switch is safe.** Counts running Claude Code CLI sessions and says whether any is busy right now, because a switch reaches a running session only after its ~30 second credential cache expires and never mid-reply.
 - **Opens a separate Claude Desktop per account.** Optional launcher apps put two desktop Claudes side by side, each on its own profile, without touching the app itself.
 - **Narrates what auto-switch would do, without doing it.** Dry-run only; the engine owns thresholds and the decision to ever turn it on is yours, at the engine.
@@ -69,7 +69,7 @@
 - **LaunchAgent for run at login,** from a real signed app bundle, so notification banners actually present.
 - **Local click log** (mode 0600), so behaviour gates are measured against real usage.
 - **Gitignored labels and commands.** Account names, the badge command and the Codex launcher live in `local_settings.py`; committed code ships generic names and names no tool.
-- **Unit tests** for every formatting, contract and parsing function (`tests/`, 51 cases).
+- **Unit tests** for every formatting, contract and parsing function, the Desktop slot helpers and the bundle builder (`tests/`, 59 cases).
 
 ## Stack
 
