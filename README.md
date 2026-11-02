@@ -69,7 +69,7 @@
 - **LaunchAgent for run at login,** from a real signed app bundle, so notification banners actually present.
 - **Local click log** (mode 0600), so behaviour gates are measured against real usage.
 - **Gitignored labels and commands.** Account names, the badge command and the Codex launcher live in `local_settings.py`; committed code ships generic names and names no tool.
-- **Unit tests** for every formatting, contract and parsing function, the Desktop slot helpers and the bundle builder (`tests/`, 64 cases).
+- **Unit tests** for formatting, contract and parsing functions, the Desktop slot helpers and the bundle builder (`tests/`, 64 cases).
 
 ## Stack
 
