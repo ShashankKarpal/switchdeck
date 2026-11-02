@@ -308,7 +308,7 @@ class BadgeCounts(unittest.TestCase):
         self.assertEqual(sd.badge_suffix({1: 1}, 1), " - 1 pending")
 
 
-class TitleText(unittest.TestCase):
+class DrivingWindow(unittest.TestCase):
     def test_picks_window_over_threshold(self):
         poll = {"threshold": 90, "windowsPct": {"1": {"fiveHour": 91, "sevenDay": 95}}}
         self.assertEqual(sd.driving_window(poll, 1), ("sevenDay", 95))
