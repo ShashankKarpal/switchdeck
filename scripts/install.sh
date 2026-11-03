@@ -119,7 +119,7 @@ step "Verify"
 sleep 5
 if ! pgrep -f "switchdeck.py" >/dev/null; then
   launchctl print "gui/$UID_NUM/$LABEL" 2>&1 | grep -E 'last exit|state' || true
-  fail "the app is not running. Check ~/switchdeck.log and the exit code above."
+  fail "the app is not running. Check ~/Library/Logs/switchdeck.log and the exit code above."
 fi
 echo "running: pid $(pgrep -f switchdeck.py | head -1)"
 tail -3 "$HOME/switchdeck-clicks.log" 2>/dev/null || true

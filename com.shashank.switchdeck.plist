@@ -31,8 +31,8 @@
        because a menu bar app has no window to miss. See the notes in
        docs/STATE.md before changing the venv or the Python behind it. -->
   <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key><string>/Users/YOU/switchdeck.log</string>
-  <key>StandardErrorPath</key><string>/Users/YOU/switchdeck.log</string>
+  <key>StandardOutPath</key><string>/Users/YOU/Library/Logs/switchdeck.log</string>
+  <key>StandardErrorPath</key><string>/Users/YOU/Library/Logs/switchdeck.log</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
