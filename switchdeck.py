@@ -451,8 +451,11 @@ def _usable_pct(v):
     (True is an int and would read as 1 percent), not NaN or an infinity
     (json.loads accepts them; round() raises on them). An unusable value is
     treated exactly like a missing window."""
-    return (isinstance(v, (int, float)) and not isinstance(v, bool)
-            and math.isfinite(v))
+    if isinstance(v, bool):
+        return False
+    if isinstance(v, int):
+        return True  # every int is finite; isfinite overflows on huge ones
+    return isinstance(v, float) and math.isfinite(v)
 
 
 def driving_window(poll, slot_no):
@@ -469,7 +472,7 @@ def driving_window(poll, slot_no):
     if not cands:
         return None, None
     thr = poll.get("threshold")
-    if isinstance(thr, (int, float)):
+    if _usable_pct(thr):
         over = {k: v for k, v in cands.items() if v >= thr}
         if over:
             cands = over

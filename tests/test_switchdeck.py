@@ -359,6 +359,15 @@ class DrivingWindow(unittest.TestCase):
         poll = {"windowsPct": {"1": {"fiveHour": True}}}
         self.assertEqual(sd.driving_window(poll, 1), (None, None))
 
+    def test_int_too_large_for_a_float_stays_usable(self):
+        """Review round 1: math.isfinite raises OverflowError on an int too
+        large for a float; any non-bool int is finite, so it must pass."""
+        big = 10 ** 400
+        poll = {"threshold": 90, "windowsPct": {"1": {"fiveHour": big}}}
+        self.assertEqual(sd.driving_window(poll, 1), ("fiveHour", big))
+        self.assertEqual(sd.fmt_usage({"fiveHour": {"pct": big}}),
+                         "5h %d%%" % big)
+
     def test_unusable_window_never_reaches_round_in_the_menu_text(self):
         """The same values in a usage window's pct are skipped like a window
         without a pct, so the slot row and the title render the rest."""
