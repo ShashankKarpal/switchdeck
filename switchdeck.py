@@ -1001,7 +1001,8 @@ class SwitchDeck(rumps.App):
                 mark = u"✓ " if acc.get("active") else "     "
                 title = "%s%s  -  %s%s" % (mark, label, usage_line(acc),
                                            badge_suffix(badge, n))
-                cb = None if acc.get("active") else self._make_switch(n, label)
+                cb = (self._active_row_click if acc.get("active")
+                      else self._make_switch(n, label))
                 items.append(rumps.MenuItem(title, callback=cb))
         else:
             items.append(rumps.MenuItem("cswap unavailable - click to retry",
@@ -1036,6 +1037,12 @@ class SwitchDeck(rumps.App):
         self.menu.clear()
         for it in items:
             self.menu.add(it)
+
+    def _active_row_click(self, _sender):
+        """The active slot's row. A real callback keeps macOS from greying
+        the row out (callback=None disables a menu item); clicking it does
+        nothing: the slot is already active, so no switch and no engine call."""
+        return None
 
     def _make_switch(self, n, label):
         def _cb(_sender):

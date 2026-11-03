@@ -415,6 +415,47 @@ class ClickLogMode(unittest.TestCase):
             os.rmdir(d)
 
 
+class ActiveSlotRow(unittest.TestCase):
+    """The active slot's row has a do-nothing callback, so macOS draws it in
+    normal text (callback=None greys a menu item out), and clicking it never
+    switches or calls the engine. The real _render runs on a stand-in self
+    with rumps.MenuItem recorded, so no menu bar is needed."""
+
+    class _Item:
+        def __init__(self, title, callback=None):
+            self.title, self.callback = title, callback
+
+    def test_active_row_is_clickable_and_does_nothing(self):
+        import types
+        noop = getattr(sd.SwitchDeck, "_active_row_click", None)
+        self.assertIsNotNone(noop, "SwitchDeck._active_row_click is missing")
+        added = []
+        menu = types.SimpleNamespace(clear=lambda: added.clear(), add=added.append)
+        switch_cb = object()
+        fake = types.SimpleNamespace(menu=menu, title=None, codex_line="",
+                                     refresh=None, refresh_all=None, _quit=None,
+                                     _open_codex=None, _make_open_desktop=None)
+        fake._make_switch = mock.Mock(return_value=switch_cb)
+        fake._active_row_click = types.MethodType(noop, fake)
+        data = {"accounts": [
+            {"number": 1, "active": False, "usage": {"fiveHour": {"pct": 4}}},
+            {"number": 2, "active": True, "usage": {"fiveHour": {"pct": 21}}}]}
+        with mock.patch.object(sd.rumps, "MenuItem", self._Item), \
+                mock.patch.object(sd, "_run", side_effect=AssertionError("engine called")):
+            sd.SwitchDeck._render(fake, data, None, None, "org", {"live": 0, "busy": 0})
+            rows = {it.title.split("  -  ")[0].strip(): it for it in added
+                    if getattr(it, "title", "").startswith((u"✓", "     "))}
+            active = [it for t, it in rows.items() if t.startswith(u"✓")]
+            self.assertEqual(len(active), 1)
+            self.assertIsNotNone(active[0].callback)
+            self.assertIsNot(active[0].callback, switch_cb)
+            self.assertIsNone(active[0].callback(active[0]))
+        fake._make_switch.assert_called_once()
+        self.assertEqual(fake._make_switch.call_args[0][0], 1)
+        inactive = [it for t, it in rows.items() if not t.startswith(u"✓")]
+        self.assertEqual([it.callback for it in inactive], [switch_cb])
+
+
 class NarrationOutcome(unittest.TestCase):
     POLL = {"event": "poll", "threshold": 90,
             "windowsPct": {"1": {"fiveHour": 91, "sevenDay": 40}}}

@@ -15,7 +15,7 @@
   <img alt="Status" src="https://img.shields.io/badge/status-v2.0-2D647F?style=flat-square">
   <img alt="Local only" src="https://img.shields.io/badge/local-only-2D647F?style=flat-square">
   <img alt="Stack" src="https://img.shields.io/badge/built%20with-Python-1A1917?style=flat-square">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-75%20unittest-1A1917?style=flat-square">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-76%20unittest-1A1917?style=flat-square">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-1A1917?style=flat-square"></a>
 </p>
 
@@ -69,7 +69,7 @@
 - **LaunchAgent for run at login,** from a real signed app bundle, so notification banners actually present.
 - **Local click log** (mode 0600), so behaviour gates are measured against real usage.
 - **Gitignored labels and commands.** Account names, the badge command and the Codex launcher live in `local_settings.py`; committed code ships generic names and names no tool.
-- **Unit tests** for formatting, contract and parsing functions, the Desktop slot helpers and the bundle builder (`tests/`, 75 cases).
+- **Unit tests** for formatting, contract and parsing functions, the Desktop slot helpers and the bundle builder (`tests/`, 76 cases).
 
 ## Stack
 
