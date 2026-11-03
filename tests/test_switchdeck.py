@@ -317,6 +317,25 @@ class DrivingWindow(unittest.TestCase):
         self.assertEqual(sd.driving_window({"windowsPct": {}}, 1), (None, None))
         self.assertEqual(sd.driving_window(None, 1), (None, None))
 
+    def test_highest_window_when_none_is_over_the_threshold(self):
+        """The fallback: nothing at or over the threshold, or no threshold
+        in the poll, names the slot's highest window."""
+        wins = {"windowsPct": {"1": {"fiveHour": 85, "sevenDay": 40}}}
+        for poll in (dict(wins, threshold=90), wins):
+            with self.subTest(threshold=poll.get("threshold")):
+                self.assertEqual(sd.driving_window(poll, 1), ("fiveHour", 85))
+
+    def test_threshold_filter_keeps_a_nan_window_out(self):
+        """Pins the threshold filter's only effect. For finite numbers, when
+        any window is at or over the threshold the overall max is too, so no
+        finite fixture can tell the filter from a plain max. NaN compares
+        false both ways: a plain max that meets it first returns it, the
+        filter drops it. json.loads accepts NaN, so it could arrive from the
+        engine in principle (CLAUDE.md 2026-11-03)."""
+        poll = {"threshold": 90,
+                "windowsPct": {"1": {"fiveHour": float("nan"), "sevenDay": 95}}}
+        self.assertEqual(sd.driving_window(poll, 1), ("sevenDay", 95))
+
 
 class ClickLogMode(unittest.TestCase):
     def test_existing_world_readable_log_is_tightened(self):
