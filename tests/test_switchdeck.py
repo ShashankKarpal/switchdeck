@@ -330,8 +330,9 @@ class DrivingWindow(unittest.TestCase):
         any window is at or over the threshold the overall max is too, so no
         finite fixture can tell the filter from a plain max. NaN compares
         false both ways: a plain max that meets it first returns it, the
-        filter drops it. json.loads accepts NaN, so it could arrive from the
-        engine in principle (CLAUDE.md 2026-11-03)."""
+        filter drops it, but only while a finite window is at or over the
+        threshold. With nothing over it, or no threshold, a NaN met first
+        still wins (recorded in CLAUDE.md 2026-11-03, not guarded)."""
         poll = {"threshold": 90,
                 "windowsPct": {"1": {"fiveHour": float("nan"), "sevenDay": 95}}}
         self.assertEqual(sd.driving_window(poll, 1), ("sevenDay", 95))

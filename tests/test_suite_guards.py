@@ -59,14 +59,6 @@ def duplicate_names(paths):
     return problems
 
 
-def _iter_tests(suite):
-    for item in suite:
-        if isinstance(item, unittest.TestSuite):
-            yield from _iter_tests(item)
-        else:
-            yield item
-
-
 class SuiteGuards(unittest.TestCase):
     def test_no_duplicate_class_or_test_names(self):
         paths = sorted(glob.glob(os.path.join(HERE, "*.py")))
@@ -94,12 +86,12 @@ class SuiteGuards(unittest.TestCase):
     def test_readme_states_the_count_the_suite_runs(self):
         # A fresh loader: defaultTestLoader carries the -k patterns of the
         # outer run, which would shrink the count.
-        suite = unittest.TestLoader().discover(HERE, top_level_dir=HERE)
-        failed = [t.id() for t in _iter_tests(suite)
-                  if isinstance(t, unittest.loader._FailedTest)]
-        if failed:
+        loader = unittest.TestLoader()
+        suite = loader.discover(HERE, top_level_dir=HERE)
+        if loader.errors:
             self.fail("a test module did not import (%s); run with "
-                      "~/.switchdeck-venv/bin/python" % ", ".join(failed))
+                      "~/.switchdeck-venv/bin/python"
+                      % "; ".join(e.splitlines()[0] for e in loader.errors))
         count = suite.countTestCases()
         with open(README, encoding="utf-8") as f:
             text = f.read()
