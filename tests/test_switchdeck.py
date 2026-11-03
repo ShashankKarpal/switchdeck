@@ -326,16 +326,53 @@ class DrivingWindow(unittest.TestCase):
                 self.assertEqual(sd.driving_window(poll, 1), ("fiveHour", 85))
 
     def test_threshold_filter_keeps_a_nan_window_out(self):
-        """Pins the threshold filter's only effect. For finite numbers, when
-        any window is at or over the threshold the overall max is too, so no
-        finite fixture can tell the filter from a plain max. NaN compares
-        false both ways: a plain max that meets it first returns it, the
-        filter drops it, but only while a finite window is at or over the
-        threshold. With nothing over it, or no threshold, a NaN met first
-        still wins (recorded in CLAUDE.md 2026-11-03, not guarded)."""
+        """NaN met first while a finite window is over the threshold: the
+        finite window is named. Kept from 2026-11-03; since the non-finite
+        fix the NaN is skipped before the threshold filter runs, so this
+        pins the result, no longer the filter itself."""
         poll = {"threshold": 90,
                 "windowsPct": {"1": {"fiveHour": float("nan"), "sevenDay": 95}}}
         self.assertEqual(sd.driving_window(poll, 1), ("sevenDay", 95))
+
+    def test_nan_met_first_with_nothing_over_the_threshold_is_skipped(self):
+        """A NaN window is skipped like a missing one, with nothing over the
+        threshold and with no threshold at all; before the fix max() kept
+        the NaN it met first and narration_outcome's round() raised."""
+        wins = {"windowsPct": {"1": {"fiveHour": float("nan"), "sevenDay": 40}}}
+        for poll in (dict(wins, threshold=90), wins):
+            with self.subTest(threshold=poll.get("threshold")):
+                self.assertEqual(sd.driving_window(poll, 1), ("sevenDay", 40))
+
+    def test_infinity_window_is_skipped(self):
+        poll = {"threshold": 90,
+                "windowsPct": {"1": {"fiveHour": float("inf"), "sevenDay": 40}}}
+        self.assertEqual(sd.driving_window(poll, 1), ("sevenDay", 40))
+
+    def test_negative_infinity_window_is_skipped(self):
+        poll = {"windowsPct": {"1": {"fiveHour": float("-inf")}}}
+        self.assertEqual(sd.driving_window(poll, 1), (None, None))
+
+    def test_bool_window_is_skipped(self):
+        """True is an int in Python and would read as 1 percent."""
+        poll = {"windowsPct": {"1": {"fiveHour": True, "sevenDay": 0}}}
+        self.assertEqual(sd.driving_window(poll, 1), ("sevenDay", 0))
+        poll = {"windowsPct": {"1": {"fiveHour": True}}}
+        self.assertEqual(sd.driving_window(poll, 1), (None, None))
+
+    def test_unusable_window_never_reaches_round_in_the_menu_text(self):
+        """The same values in a usage window's pct are skipped like a window
+        without a pct, so the slot row and the title render the rest."""
+        saved = (sd.SHORT_LABELS, sd.TITLE_USAGE)
+        self.addCleanup(lambda: (setattr(sd, "SHORT_LABELS", saved[0]),
+                                 setattr(sd, "TITLE_USAGE", saved[1])))
+        sd.SHORT_LABELS, sd.TITLE_USAGE = {1: "1"}, True
+        for bad in (float("nan"), float("inf"), float("-inf"), True, "50"):
+            with self.subTest(pct=bad):
+                u = {"fiveHour": {"pct": bad}, "sevenDay": {"pct": 20}}
+                self.assertEqual(sd.fmt_usage(u), "7d 20%")
+                self.assertEqual(sd.fmt_usage_rich(u), "7d 20%")
+                data = {"accounts": [{"active": True, "number": 1, "usage": u}]}
+                self.assertEqual(sd.title_text(data), u"⇄ 1 20%")
 
 
 class ClickLogMode(unittest.TestCase):

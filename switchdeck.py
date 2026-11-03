@@ -50,6 +50,7 @@ ruling: CLAUDE.md, 2026-09-05 entries.
 """
 import datetime as _dt
 import json
+import math
 import os
 import plistlib
 import subprocess
@@ -445,6 +446,15 @@ def cswap_auto_dryrun():
     return rc, events
 
 
+def _usable_pct(v):
+    """A window value is usable only as a real, finite number: not a bool
+    (True is an int and would read as 1 percent), not NaN or an infinity
+    (json.loads accepts them; round() raises on them). An unusable value is
+    treated exactly like a missing window."""
+    return (isinstance(v, (int, float)) and not isinstance(v, bool)
+            and math.isfinite(v))
+
+
 def driving_window(poll, slot_no):
     """(window name, pct) that pushed a slot over the auto threshold, from
     the poll event's windowsPct; the switch event itself does not carry it.
@@ -455,7 +465,7 @@ def driving_window(poll, slot_no):
     w = _lbl(wins, slot_no, None) if slot_no is not None else None
     if not isinstance(w, dict):
         return None, None
-    cands = {k: v for k, v in w.items() if isinstance(v, (int, float))}
+    cands = {k: v for k, v in w.items() if _usable_pct(v)}
     if not cands:
         return None, None
     thr = poll.get("threshold")
@@ -568,14 +578,15 @@ def usage_windows(u):
     order: 5h, 7d, then the engine's scoped per-model weekly windows under
     their own name (0.26.0: e.g. Fable), then spend, then anything the
     engine adds later under its raw key. Fixed order keeps the row from
-    reordering between ticks. Windows without a pct are skipped."""
+    reordering between ticks. Windows without a usable pct (see
+    _usable_pct) are skipped."""
     out = []
     if not isinstance(u, dict):
         return out
     seen = {"scoped"}
 
     def _add(label, win):
-        if isinstance(win, dict) and win.get("pct") is not None:
+        if isinstance(win, dict) and _usable_pct(win.get("pct")):
             out.append((label, win))
 
     for key, label in USAGE_WINDOWS[:2]:
