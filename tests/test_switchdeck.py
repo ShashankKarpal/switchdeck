@@ -443,17 +443,18 @@ class ActiveSlotRow(unittest.TestCase):
         with mock.patch.object(sd.rumps, "MenuItem", self._Item), \
                 mock.patch.object(sd, "_run", side_effect=AssertionError("engine called")):
             sd.SwitchDeck._render(fake, data, None, None, "org", {"live": 0, "busy": 0})
-            rows = {it.title.split("  -  ")[0].strip(): it for it in added
-                    if getattr(it, "title", "").startswith((u"✓", "     "))}
-            active = [it for t, it in rows.items() if t.startswith(u"✓")]
-            self.assertEqual(len(active), 1)
+            # the slot rows are the first two items, in slot-number order;
+            # a list, so two slots sharing one label stay two rows
+            slot_rows = added[:2]
+            self.assertTrue(all(isinstance(it, self._Item) for it in slot_rows))
+            active = [it for it in slot_rows if it.title.startswith(u"✓")]
+            self.assertEqual(active, [slot_rows[1]])
             self.assertIsNotNone(active[0].callback)
             self.assertIsNot(active[0].callback, switch_cb)
             self.assertIsNone(active[0].callback(active[0]))
         fake._make_switch.assert_called_once()
         self.assertEqual(fake._make_switch.call_args[0][0], 1)
-        inactive = [it for t, it in rows.items() if not t.startswith(u"✓")]
-        self.assertEqual([it.callback for it in inactive], [switch_cb])
+        self.assertIs(slot_rows[0].callback, switch_cb)
 
 
 class NarrationOutcome(unittest.TestCase):
