@@ -92,7 +92,7 @@ else
 fi
 
 step "LaunchAgent $LABEL"
-mkdir -p "$AGENTS"
+mkdir -p "$AGENTS" "$HOME/Library/Logs"   # launchd does not create a missing log folder
 sed -e "s|/Users/YOU|$HOME|g" "$REPO/com.shashank.switchdeck.plist" > "$PLIST.new"
 /usr/libexec/PlistBuddy -c "Set :ProgramArguments:0 $APP/Contents/MacOS/$APP_NAME" "$PLIST.new"
 /usr/libexec/PlistBuddy -c "Set :ProgramArguments:1 $REPO/switchdeck.py" "$PLIST.new"
@@ -119,7 +119,9 @@ step "Verify"
 sleep 5
 if ! pgrep -f "switchdeck.py" >/dev/null; then
   launchctl print "gui/$UID_NUM/$LABEL" 2>&1 | grep -E 'last exit|state' || true
-  fail "the app is not running. Check ~/Library/Logs/switchdeck.log and the exit code above."
+  ERRLOG="$(/usr/libexec/PlistBuddy -c 'Print :StandardErrorPath' "$PLIST" 2>/dev/null)"
+  [ -s "$ERRLOG" ] && { echo "last lines of $ERRLOG:"; tail -n 20 "$ERRLOG"; }
+  fail "the app is not running. Check ${ERRLOG:-the agent log} and the exit code above."
 fi
 echo "running: pid $(pgrep -f switchdeck.py | head -1)"
 tail -3 "$HOME/switchdeck-clicks.log" 2>/dev/null || true
