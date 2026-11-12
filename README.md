@@ -161,7 +161,7 @@ Every version must prove one human behavior changed, not that a feature shipped.
 | v1.5 | Menu bar switcher and Codex usage row | Shipped |
 | v1.7 to v1.9.1 | Engine contract, dry-run narration, real notifications from a signed bundle, resume card | Shipped |
 | v2.0 | Worker-thread refresh, reset time and pace per window, busy or idle sessions, title headroom, Desktop app slots, pending badge, unit tests | Shipped |
-| next | Swift MenuBarExtra rewrite (the long horizon; Python is interim by decision) | Planned |
+| v3.0 | Swift MenuBarExtra rewrite (the long horizon; Python is interim by decision) | Planned |
 
 One gate exception has been taken and is logged with its reason in [CLAUDE.md](CLAUDE.md).
 
